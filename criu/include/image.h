@@ -137,6 +137,21 @@ struct cr_img {
 	};
 };
 
+struct im_img {
+	int type;
+	unsigned long oflags;
+	unsigned long offset;
+	unsigned long size;
+};
+
+struct im_img_desc {
+	int type;
+	unsigned long size;
+};
+
+extern void *base_ptr;
+extern void *data_head;
+
 #define EMPTY_IMG_FD (-404)
 #define LAZY_IMG_FD  (-505)
 
@@ -175,6 +190,7 @@ extern void close_image_dir(void);
 extern int open_parent(int dfd, int *pfd);
 
 extern struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...);
+extern struct im_img *open_image_im(int type, unsigned long flags);
 #define open_image(typ, flags, ...) open_image_at(-1, typ, flags, ##__VA_ARGS__)
 extern int open_image_lazy(struct cr_img *img);
 extern struct cr_img *open_pages_image(unsigned long flags, struct cr_img *pmi, u32 *pages_id);

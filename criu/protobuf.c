@@ -110,6 +110,37 @@ err:
 	return ret;
 }
 
+int do_pb_read_one_im(struct im_img *img, void **pobj, int type)
+{
+	u8 local[PB_PKOBJ_LOCAL_SIZE];
+	void *buf = (void *)&local;
+	u32 size;
+	int ret;
+
+	if (!cr_pb_descs[type].pb_desc) {
+		pr_err("Wrong object requested %d\n", type);
+		return -1;
+	}
+	if(img->size == 0){
+		pr_err("Image size is 0\n");
+		return 0;
+	}
+	size = img->size;
+	memcpy(buf, base_ptr + img->offset, size);
+	*pobj = cr_pb_descs[type].unpack(NULL, size, buf);
+	if (!*pobj) {
+		ret = -1;
+		pr_err("Failed unpacking object %p\n", pobj);
+		goto err;
+	}
+	ret = 1;
+err:
+	if (buf != (void *)&local)
+		xfree(buf);
+
+	return ret;
+}
+
 /*
  * Writes PB record (header + packed object pointed by @obj)
  * to file @fd, using @getpksize to get packed size and @pack
@@ -158,6 +189,45 @@ int pb_write_one(struct cr_img *img, void *obj, int type)
 		goto err;
 	}
 
+	ret = 0;
+err:
+	if (buf != (void *)&local)
+		xfree(buf);
+	return ret;
+}
+
+int pb_write_one_im(struct im_img *img, void *obj, int type)
+{
+	u8 local[PB_PKOBJ_LOCAL_SIZE];
+	void *buf = (void *)&local;
+	u32 size, packed;
+	struct im_img_desc *imh;
+	int ret = -1;
+
+	if (!cr_pb_descs[type].pb_desc) {
+		pr_err("Wrong object requested %d\n", type);
+		return -1;
+	}
+	imh = data_head;
+	data_head += sizeof(struct im_img_desc);
+	img->offset = data_head - base_ptr;
+	size = cr_pb_descs[type].getpksize(obj);
+	if (size > (u32)sizeof(local)) {
+		buf = xmalloc(size);
+		if (!buf)
+			goto err;
+	}
+	packed = cr_pb_descs[type].pack(obj, buf);
+	if (packed != size) {
+		pr_err("Failed packing PB object %p\n", obj);
+		goto err;
+	}
+	imh->size = size;
+	imh->type = type;
+	memcpy(data_head, buf, size);
+	data_head += size;
+	im_img_checkpoint->img_nr++;
+	im_img_checkpoint->total_size += sizeof(struct im_img_desc) + size;
 	ret = 0;
 err:
 	if (buf != (void *)&local)

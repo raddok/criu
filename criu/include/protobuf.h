@@ -6,15 +6,18 @@
 #include "protobuf-desc.h"
 #include "common/compiler.h"
 #include "util.h"
+#include "imgset.h"
 
 struct cr_img;
 
 extern int do_pb_read_one(struct cr_img *, void **objp, int type, bool eof);
+extern int do_pb_read_one_im(struct im_img *img, void **pobj, int type);
 
 #define pb_read_one(fd, objp, type)	do_pb_read_one(fd, (void **)objp, type, false)
 #define pb_read_one_eof(fd, objp, type) do_pb_read_one(fd, (void **)objp, type, true)
 
 extern int pb_write_one(struct cr_img *, void *obj, int type);
+extern int pb_write_one_im(struct im_img *img, void *obj, int type);
 
 #define pb_pksize(__obj, __proto_message_name) (__proto_message_name##__get_packed_size(__obj) + sizeof(u32))
 

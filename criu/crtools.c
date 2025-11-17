@@ -89,6 +89,8 @@ struct {
 	{ "dedup", CR_DEDUP },
 	{ "exec", CR_EXEC_DEPRECATED },
 	{ "show", CR_SHOW_DEPRECATED },
+	{ "dump-test", CR_DUMP_TEST },
+	{ "restore-test", CR_RESTORE_TEST },
 };
 
 static int parse_criu_mode(int argc, char **argv, int *optind)
@@ -358,6 +360,12 @@ int main(int argc, char *argv[], char *envp[])
 		pr_err("The \"show\" action is deprecated by the CRIT utility.\n");
 		pr_err("To view an image use the \"crit decode -i $name --pretty\" command.\n");
 		return -1;
+
+	case CR_DUMP_TEST:
+		return cr_dump_test();
+	
+	case CR_RESTORE_TEST:
+		return cr_restore_test();
 
 	case CR_UNSET:
 	default:

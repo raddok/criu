@@ -2133,6 +2133,68 @@ static int cr_dump_finish(int ret)
 	return post_dump_ret ?: (ret != 0);
 }
 
+
+
+int cr_dump_test(){
+	TaskKobjIdsEntry *ids;
+	struct im_img *img;
+	int ret = -1;
+	pr_info("cr_dump_test called\n");
+	
+	ids = xmalloc(sizeof(*ids));
+    
+    task_kobj_ids_entry__init(ids);
+    
+    // 2. 填充字段值
+
+    // 填充 required 字段 (直接赋值，没有 has_... 标志)
+    ids->vm_id = 1001;
+    ids->files_id = 1002;
+    ids->fs_id = 1003;
+    ids->sighand_id = 1004;
+	pr_info("vm_id: %u, files_id: %u, fs_id: %u, sighand_id: %u\n",
+		ids->vm_id, ids->files_id, ids->fs_id, ids->sighand_id);
+
+    // Optional fields
+    ids->has_pid_ns_id = true;
+    ids->pid_ns_id = 2001;
+
+    ids->has_net_ns_id = true;
+    ids->net_ns_id = 2002;
+
+    ids->has_mnt_ns_id = true;
+    ids->mnt_ns_id = 2003;
+
+	init_im_pointer();
+	im_img_checkpoint->magic = 114514;
+	im_img_checkpoint->img_nr = 0;
+	im_img_checkpoint->total_size = 0;
+
+	img = open_image_im(CR_FD_IDS, O_CREAT);
+	ret = pb_write_one_im(img, ids, PB_IDS);
+	if(ret) pr_info("pb_write_one_im failed\n");
+
+	return 0;
+}
+
+int cr_restore_test(){
+	struct im_img *img;
+	TaskKobjIdsEntry *ids;
+	int ret;
+	pr_info("cr_restore_test called\n");
+	init_im_pointer();
+	if(im_img_checkpoint->magic != 114514){
+		pr_err("im_img_checkpoint->magic != 114514, value: %lu\n", im_img_checkpoint->magic);
+		return -1;
+	}
+	pr_info("im_img_checkpoint->img_nr: %d, total_size: %lu\n", im_img_checkpoint->img_nr, im_img_checkpoint->total_size);
+	img = open_image_im(CR_FD_IDS, O_RDONLY);
+	ret = do_pb_read_one_im(img, (void **)&ids, PB_IDS);
+	if(ret) pr_info("vm_id: %u, files_id: %u, fs_id: %u, sighand_id: %u\n",
+		ids->vm_id, ids->files_id, ids->fs_id, ids->sighand_id);
+	return 0;
+}
+
 int cr_dump_tasks(pid_t pid)
 {
 	InventoryEntry he = INVENTORY_ENTRY__INIT;

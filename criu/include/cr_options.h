@@ -129,6 +129,8 @@ enum criu_mode {
 	CR_CPUINFO_CHECK,
 	CR_EXEC_DEPRECATED,
 	CR_SHOW_DEPRECATED,
+	CR_DUMP_TEST,
+	CR_RESTORE_TEST,
 };
 
 struct cr_options {
