@@ -10,7 +10,7 @@
 #define RTM_GETNSID 90
 #endif
 
-struct cr_imgset;
+struct imgset;
 struct ns_id;
 extern int dump_net_ns(struct ns_id *ns);
 extern int prepare_net_namespaces(void);
@@ -36,7 +36,7 @@ extern int network_lock_internal(bool restore);
 extern struct ns_desc net_ns_desc;
 
 #include "images/netdev.pb-c.h"
-extern int write_netdev_img(NetDeviceEntry *nde, struct cr_imgset *fds, struct nlattr **info);
+extern int write_netdev_img(NetDeviceEntry *nde, struct imgset *fds, struct nlattr **info);
 extern int read_ns_sys_file(char *path, char *buf, int len);
 struct net_link;
 extern int restore_link_parms(struct net_link *link, int nlsk);

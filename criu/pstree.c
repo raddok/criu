@@ -517,7 +517,7 @@ static int read_pstree_ids(struct pstree_item *pi)
 {
 	int ret;
 	struct cr_img *img;
-
+	pr_info("vpid is %d\n", vpid(pi));
 	img = open_image(CR_FD_IDS, O_RSTR, vpid(pi));
 	if (!img)
 		return -1;

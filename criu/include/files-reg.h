@@ -7,7 +7,7 @@
 #include "images/regfile.pb-c.h"
 #include "images/ghost-file.pb-c.h"
 
-struct cr_imgset;
+struct imgset;
 struct fd_parms;
 
 struct file_remap {

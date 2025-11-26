@@ -255,7 +255,7 @@ int main(int argc, char *argv[], char *envp[])
 	}
 
 	/* We must not open imgs dir, if service is called */
-	if (opts.mode != CR_SERVICE) {
+	if (opts.mode != CR_SERVICE && opts.image_type != IMAGE_TYPE_IM) {
 		ret = open_image_dir(opts.imgs_dir, image_dir_mode());
 		if (ret < 0) {
 			pr_err("Couldn't open image dir %s\n", opts.imgs_dir);
@@ -363,7 +363,7 @@ int main(int argc, char *argv[], char *envp[])
 
 	case CR_DUMP_TEST:
 		return cr_dump_test();
-	
+
 	case CR_RESTORE_TEST:
 		return cr_restore_test();
 

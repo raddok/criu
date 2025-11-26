@@ -12,7 +12,7 @@ struct parasite_drain_fd;
 struct vm_area_list;
 struct pstree_item;
 struct list_head;
-struct cr_imgset;
+struct imgset;
 struct fd_opts;
 struct pid;
 struct parasite_dump_cgroup_args;

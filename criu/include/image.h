@@ -11,6 +11,7 @@
 #include "bfd.h"
 #include "log.h"
 #include "common/bug.h"
+#include <stdarg.h>
 
 #define PAGE_RSS  1
 #define PAGE_ANON 2
@@ -100,7 +101,7 @@
 #define VMA_AREA_MEMFD	 (1 << 14)
 #define VMA_AREA_SHSTK	 (1 << 15)
 #define VMA_AREA_GUARD	 (1 << 16)
-#define VMA_AREA_UPROBES	(1 << 17)
+#define VMA_AREA_UPROBES (1 << 17)
 
 #define VMA_EXT_PLUGIN	  (1 << 27)
 #define VMA_CLOSE	  (1 << 28)
@@ -137,28 +138,45 @@ struct cr_img {
 	};
 };
 
+typedef enum {
+	IMAGE_TYPE_CR,
+	IMAGE_TYPE_IM,
+} image_type_t;
+
 struct im_img {
 	int type;
 	unsigned long oflags;
 	unsigned long offset;
 	unsigned long size;
+	unsigned long id;
 };
 
 struct im_img_desc {
 	int type;
 	unsigned long size;
+	unsigned long id;
+	unsigned long next_desc;
+};
+
+struct img_entry {
+	unsigned long offset;
+	unsigned long id;
+	unsigned long size;
+	unsigned long next_offset;
+	unsigned long total_size;
+	struct img_entry *next_entry;
 };
 
 extern void *base_ptr;
 extern void *data_head;
+extern struct im_img_desc *current_im_desc;
+extern unsigned long cxl_length;
 
 #define EMPTY_IMG_FD (-404)
 #define LAZY_IMG_FD  (-505)
 
-static inline bool empty_image(struct cr_img *img)
-{
-	return img && img->_x.fd == EMPTY_IMG_FD;
-}
+bool empty_image_generic(void *img);
+#define empty_image(img) empty_image_generic((void *)(img))
 
 static inline bool lazy_image(struct cr_img *img)
 {
@@ -167,18 +185,9 @@ static inline bool lazy_image(struct cr_img *img)
 
 extern int open_image_lazy(struct cr_img *img);
 
-static inline int img_raw_fd(struct cr_img *img)
-{
-	if (!img)
-		return -1;
-	if (lazy_image(img) && open_image_lazy(img))
-		return -1;
+extern int img_raw_fd(void *img);
 
-	BUG_ON(bfd_buffered(&img->_x));
-	return img->_x.fd;
-}
-
-extern off_t img_raw_size(struct cr_img *img);
+extern off_t img_raw_size(void *img);
 
 extern int open_image_dir(char *dir, int mode);
 extern void close_image_dir(void);
@@ -189,25 +198,28 @@ extern void close_image_dir(void);
  */
 extern int open_parent(int dfd, int *pfd);
 
-extern struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...);
-extern struct im_img *open_image_im(int type, unsigned long flags);
-#define open_image(typ, flags, ...) open_image_at(-1, typ, flags, ##__VA_ARGS__)
+extern void *open_image_generic(int type, unsigned long flags, ...);
+extern void *open_image_at_generic(int dfd, int type, unsigned long flags, ...);
+struct im_img *open_image_im(int type, unsigned long flags, va_list args);
+#define open_image_at(dfd, typ, flags, ...) open_image_at_generic(dfd, typ, flags, ##__VA_ARGS__)
+#define open_image(typ, flags, ...)	    open_image_generic(typ, flags, ##__VA_ARGS__)
 extern int open_image_lazy(struct cr_img *img);
-extern struct cr_img *open_pages_image(unsigned long flags, struct cr_img *pmi, u32 *pages_id);
-extern struct cr_img *open_pages_image_at(int dfd, unsigned long flags, struct cr_img *pmi, u32 *pages_id);
+extern void *open_pages_image(unsigned long flags, void *pmi, u32 *pages_id);
+extern void *open_pages_image_at(int dfd, unsigned long flags, void *pmi, u32 *pages_id);
 extern void up_page_ids_base(void);
 
 extern struct cr_img *img_from_fd(int fd); /* for cr-show mostly */
 
-extern int write_img_buf(struct cr_img *, const void *ptr, int size);
+extern int write_img_buf(void *, const void *ptr, int size);
 #define write_img(img, ptr) write_img_buf((img), (ptr), sizeof(*(ptr)))
-extern int read_img_buf_eof(struct cr_img *, void *ptr, int size);
+extern int read_img_buf_eof(void *, void *ptr, int size);
 #define read_img_eof(img, ptr) read_img_buf_eof((img), (ptr), sizeof(*(ptr)))
-extern int read_img_buf(struct cr_img *, void *ptr, int size);
+extern int read_img_buf(void *, void *ptr, int size);
 #define read_img(img, ptr) read_img_buf((img), (ptr), sizeof(*(ptr)))
-extern int read_img_str(struct cr_img *, char **pstr, int size);
+extern int read_img_str(void *, char **pstr, int size);
 
-extern void close_image(struct cr_img *);
+extern void close_image_generic(void *img);
+#define close_image(img) close_image_generic((void *)(img))
 
 extern int add_inventory_plugin(const char *name);
 extern int check_inventory_plugins(void);

@@ -308,8 +308,9 @@ static int bpfmap_open(struct file_desc *d, int *new_fd)
 	if (bpfe->has_map_extra)
 		bpfmap_opts.map_extra = bpfe->map_extra;
 
-	bpfmap_fd = bpf_map_create(bpfe->map_type, bpfe->map_name, bpfe->key_size, bpfe->value_size, bpfe->max_entries,
-				   &bpfmap_opts);
+	// bpfmap_fd = bpf_map_create(bpfe->map_type, bpfe->map_name, bpfe->key_size, bpfe->value_size, bpfe->max_entries,
+	// 			   &bpfmap_opts);
+	bpfmap_fd = -1;
 #endif
 
 	if (bpfmap_fd < 0) {

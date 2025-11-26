@@ -472,7 +472,7 @@ static int ipv4_conf_op_old(char *tgt, int *conf, int n, int op, int *def_conf)
 	return 0;
 }
 
-int write_netdev_img(NetDeviceEntry *nde, struct cr_imgset *fds, struct nlattr **info)
+int write_netdev_img(NetDeviceEntry *nde, struct imgset *fds, struct nlattr **info)
 {
 	return pb_write_one(img_from_set(fds, CR_FD_NETDEV), nde, PB_NETDEV);
 }
@@ -488,8 +488,8 @@ static int lookup_net_by_netid(struct ns_id *ns, int net_id)
 	return -1;
 }
 
-static int dump_one_netdev(int type, struct ifinfomsg *ifi, struct nlattr **tb, struct ns_id *ns, struct cr_imgset *fds,
-			   int (*dump)(NetDeviceEntry *, struct cr_imgset *, struct nlattr **info))
+static int dump_one_netdev(int type, struct ifinfomsg *ifi, struct nlattr **tb, struct ns_id *ns, struct imgset *fds,
+			   int (*dump)(NetDeviceEntry *, struct imgset *, struct nlattr **info))
 {
 	int ret = -1, i, peer_ifindex;
 	NetDeviceEntry netdev = NET_DEVICE_ENTRY__INIT;
@@ -638,7 +638,7 @@ static char *link_kind(struct ifinfomsg *ifi, struct nlattr **tb)
 }
 
 static int dump_unknown_device(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns,
-			       struct cr_imgset *fds)
+			       struct imgset *fds)
 {
 	int ret;
 
@@ -651,12 +651,12 @@ static int dump_unknown_device(struct ifinfomsg *ifi, char *kind, struct nlattr 
 	return -1;
 }
 
-static int dump_bridge(NetDeviceEntry *nde, struct cr_imgset *imgset, struct nlattr **info)
+static int dump_bridge(NetDeviceEntry *nde, struct imgset *imgset, struct nlattr **info)
 {
 	return write_netdev_img(nde, imgset, info);
 }
 
-static int dump_macvlan(NetDeviceEntry *nde, struct cr_imgset *imgset, struct nlattr **info)
+static int dump_macvlan(NetDeviceEntry *nde, struct imgset *imgset, struct nlattr **info)
 {
 	MacvlanLinkEntry macvlan = MACVLAN_LINK_ENTRY__INIT;
 	int ret;
@@ -688,7 +688,7 @@ static int dump_macvlan(NetDeviceEntry *nde, struct cr_imgset *imgset, struct nl
 }
 
 static int dump_one_ethernet(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns,
-			     struct cr_imgset *fds)
+			     struct imgset *fds)
 {
 	if (!strcmp(kind, "veth"))
 		/*
@@ -726,7 +726,7 @@ static int dump_one_ethernet(struct ifinfomsg *ifi, char *kind, struct nlattr **
 }
 
 static int dump_one_gendev(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns,
-			   struct cr_imgset *fds)
+			   struct imgset *fds)
 {
 	if (!strcmp(kind, "tun"))
 		return dump_one_netdev(ND_TYPE__TUN, ifi, tb, ns, fds, dump_tun_link);
@@ -735,7 +735,7 @@ static int dump_one_gendev(struct ifinfomsg *ifi, char *kind, struct nlattr **tb
 }
 
 static int dump_one_voiddev(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns,
-			    struct cr_imgset *fds)
+			    struct imgset *fds)
 {
 	if (!strcmp(kind, "venet"))
 		return dump_one_netdev(ND_TYPE__VENET, ifi, tb, ns, fds, NULL);
@@ -743,7 +743,7 @@ static int dump_one_voiddev(struct ifinfomsg *ifi, char *kind, struct nlattr **t
 	return dump_unknown_device(ifi, kind, tb, ns, fds);
 }
 
-static int dump_one_gre(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns, struct cr_imgset *fds)
+static int dump_one_gre(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns, struct imgset *fds)
 {
 	if (!strcmp(kind, "gre")) {
 		char *name = (char *)RTA_DATA(tb[IFLA_IFNAME]);
@@ -763,7 +763,7 @@ static int dump_one_gre(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, s
 	return dump_unknown_device(ifi, kind, tb, ns, fds);
 }
 
-static int dump_sit(NetDeviceEntry *nde, struct cr_imgset *imgset, struct nlattr **info)
+static int dump_sit(NetDeviceEntry *nde, struct imgset *imgset, struct nlattr **info)
 {
 	int ret;
 	struct nlattr *data[__IFLA_IPTUN_MAX];
@@ -863,7 +863,7 @@ static int dump_sit(NetDeviceEntry *nde, struct cr_imgset *imgset, struct nlattr
 	return write_netdev_img(nde, imgset, info);
 }
 
-static int dump_one_sit(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns, struct cr_imgset *fds)
+static int dump_one_sit(struct ifinfomsg *ifi, char *kind, struct nlattr **tb, struct ns_id *ns, struct imgset *fds)
 {
 	char *name;
 
@@ -893,7 +893,7 @@ static int list_one_link(struct nlmsghdr *hdr, struct ns_id *ns, void *arg)
 
 static int dump_one_link(struct nlmsghdr *hdr, struct ns_id *ns, void *arg)
 {
-	struct cr_imgset *fds = arg;
+	struct imgset *fds = arg;
 	struct ifinfomsg *ifi;
 	int ret = 0, len = hdr->nlmsg_len - NLMSG_LENGTH(sizeof(*ifi));
 	struct nlattr *tb[IFLA_MAX + 1];
@@ -1068,7 +1068,7 @@ out_img:
 	return exit_code;
 }
 
-static int dump_nf_ct(struct cr_imgset *fds, int type)
+static int dump_nf_ct(struct imgset *fds, int type)
 {
 	struct cr_img *img;
 	struct {
@@ -1137,7 +1137,7 @@ static int list_links(int rtsk, void *args)
 	return do_rtnl_req(rtsk, &req, sizeof(req), list_one_link, NULL, NULL, args);
 }
 
-static int dump_links(int rtsk, struct ns_id *ns, struct cr_imgset *fds)
+static int dump_links(int rtsk, struct ns_id *ns, struct imgset *fds)
 {
 	struct {
 		struct nlmsghdr nlh;
@@ -1989,13 +1989,13 @@ static int run_iptables_tool(char *def_cmd, int fdin, int fdout)
 	return ret;
 }
 
-static inline int dump_ifaddr(struct cr_imgset *fds)
+static inline int dump_ifaddr(struct imgset *fds)
 {
 	struct cr_img *img = img_from_set(fds, CR_FD_IFADDR);
 	return run_ip_tool("addr", "save", NULL, NULL, -1, img_raw_fd(img), 0);
 }
 
-static inline int dump_route(struct cr_imgset *fds)
+static inline int dump_route(struct imgset *fds)
 {
 	struct cr_img *img;
 
@@ -2014,7 +2014,7 @@ static inline int dump_route(struct cr_imgset *fds)
 	return 0;
 }
 
-static inline int dump_rule(struct cr_imgset *fds)
+static inline int dump_rule(struct imgset *fds)
 {
 	struct cr_img *img;
 	char *path;
@@ -2035,7 +2035,7 @@ static inline int dump_rule(struct cr_imgset *fds)
 	return 0;
 }
 
-static inline int dump_iptables(struct cr_imgset *fds)
+static inline int dump_iptables(struct imgset *fds)
 {
 	struct cr_img *img;
 	char *iptables_cmd = "iptables-save";
@@ -2075,7 +2075,7 @@ static inline int dump_iptables(struct cr_imgset *fds)
 }
 
 #if defined(CONFIG_HAS_NFTABLES_LIB_API_0) || defined(CONFIG_HAS_NFTABLES_LIB_API_1)
-static inline int dump_nftables(struct cr_imgset *fds)
+static inline int dump_nftables(struct imgset *fds)
 {
 	int ret = -1;
 	struct cr_img *img;
@@ -2239,7 +2239,7 @@ static int ipv4_sysctls_ping_group_range_map_gid(SysctlEntry *ent, size_t size)
 	return 0;
 }
 
-static int dump_netns_conf(struct ns_id *ns, struct cr_imgset *fds)
+static int dump_netns_conf(struct ns_id *ns, struct imgset *fds)
 {
 	void *buf, *o_buf;
 	int ret = -1;
@@ -2847,10 +2847,10 @@ int net_set_ext(struct ns_id *ns)
 
 int dump_net_ns(struct ns_id *ns)
 {
-	struct cr_imgset *fds;
+	struct imgset *fds;
 	int ret;
 
-	fds = cr_imgset_open(ns->id, NETNS, O_DUMP);
+	fds = opts.image_type ? (struct imgset *)im_imgset_open(ns->id, NETNS, O_DUMP) : (struct imgset *)cr_imgset_open(ns->id, NETNS, O_DUMP);
 	if (fds == NULL)
 		return -1;
 
@@ -2914,7 +2914,7 @@ out:
 	close(ns_sysfs_fd);
 	ns_sysfs_fd = -1;
 
-	close_cr_imgset(&fds);
+	close_imgset(&fds);
 	return ret;
 }
 

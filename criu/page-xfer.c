@@ -257,6 +257,32 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 	ssize_t ret;
 	ssize_t curr = 0;
 
+	if (opts.image_type == IMAGE_TYPE_IM) {
+		struct im_img *img;
+		img = (struct im_img *)(xfer->pi);
+		im_write_header(img->type, img->id);
+		while(1){
+			ret = read(p, data_head, len);
+			if (ret <= 0) {
+				pr_err("read failed in write_pages_loc\n");
+			}
+			curr += ret;
+			data_head += ret;
+			if (curr == len)
+				break;
+		}
+		current_im_desc->size += len;
+		im_img_checkpoint->total_size += len;
+		if ((data_head - base_ptr) % 8 != 0) {
+			int padding = 8 - ((data_head - base_ptr) % 8);
+			pr_info("Need padding size %d\n", padding);
+			data_head += padding;
+			current_im_desc->size += padding;
+			im_img_checkpoint->total_size += padding;
+		}
+		pr_info("Total_size now is %ld\n", im_img_checkpoint->total_size);
+		return 0;
+	}
 	while (1) {
 		ret = splice(p, NULL, img_raw_fd(xfer->pi), NULL, len - curr, SPLICE_F_MOVE);
 		if (ret == -1) {

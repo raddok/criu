@@ -57,7 +57,8 @@ struct restore_posix_timer {
 };
 
 #ifndef rst_shstk_info
-struct rst_shstk_info {};
+struct rst_shstk_info {
+};
 #endif
 
 /*
@@ -239,6 +240,8 @@ struct task_restore_args {
 	int child_subreaper;
 	int membarrier_registration_mask;
 	bool has_clone3_set_tid;
+	bool image_type;
+	unsigned long cxl_size;
 
 	/*
 	 * info about rseq from libc used to

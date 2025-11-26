@@ -33,3 +33,5 @@ compel/include/asm
 include/common/asm
 include/common/config.h
 build/**
+.cache/*
+compile_commands.json

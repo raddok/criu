@@ -18,7 +18,7 @@
 struct parasite_drain_fd;
 struct pstree_item;
 struct file_desc;
-struct cr_imgset;
+struct imgset;
 struct rst_info;
 struct parasite_ctl;
 

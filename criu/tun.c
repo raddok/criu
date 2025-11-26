@@ -450,7 +450,7 @@ struct collect_image_info tunfile_cinfo = {
 	.collect = collect_one_tunfile,
 };
 
-int dump_tun_link(NetDeviceEntry *nde, struct cr_imgset *fds, struct nlattr **info)
+int dump_tun_link(NetDeviceEntry *nde, struct imgset *fds, struct nlattr **info)
 {
 	TunLinkEntry tle = TUN_LINK_ENTRY__INIT;
 	char spath[64];

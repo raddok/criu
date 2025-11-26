@@ -102,6 +102,7 @@
 #include "cr-errno.h"
 #include "timer.h"
 #include "sigact.h"
+#include "imgset.h"
 
 #ifndef arch_export_restore_thread
 #define arch_export_restore_thread __export_restore_thread
@@ -272,16 +273,19 @@ static int crtools_prepare_shared(void)
  */
 
 static struct collect_image_info *cinfos[] = {
-	&file_locks_cinfo,  &pipe_data_cinfo, &fifo_data_cinfo, &sk_queues_cinfo,
+	&file_locks_cinfo,
+	&pipe_data_cinfo,
+	&fifo_data_cinfo,
+	&sk_queues_cinfo,
 #ifdef CONFIG_HAS_LIBBPF
 	&bpfmap_data_cinfo,
 #endif
 };
 
 static struct collect_image_info *cinfos_files[] = {
-	&unix_sk_cinfo,	      &fifo_cinfo,     &pipe_cinfo,    &nsfile_cinfo,	    &packet_sk_cinfo,
-	&netlink_sk_cinfo,    &eventfd_cinfo,  &epoll_cinfo,   &epoll_tfd_cinfo,    &signalfd_cinfo,
-	&tunfile_cinfo,	      &timerfd_cinfo,  &inotify_cinfo, &inotify_mark_cinfo, &fanotify_cinfo,
+	&unix_sk_cinfo, &fifo_cinfo, &pipe_cinfo, &nsfile_cinfo, &packet_sk_cinfo,
+	&netlink_sk_cinfo, &eventfd_cinfo, &epoll_cinfo, &epoll_tfd_cinfo, &signalfd_cinfo,
+	&tunfile_cinfo, &timerfd_cinfo, &inotify_cinfo, &inotify_mark_cinfo, &fanotify_cinfo,
 	&fanotify_mark_cinfo, &ext_file_cinfo, &memfd_cinfo, &pidfd_cinfo
 };
 
@@ -1709,7 +1713,10 @@ static int restore_task_with_children(void *_arg)
 }
 
 int __attribute((weak)) arch_ptrace_restore(int pid, struct pstree_item *item);
-int arch_ptrace_restore(int pid, struct pstree_item *item) { return 0; }
+int arch_ptrace_restore(int pid, struct pstree_item *item)
+{
+	return 0;
+}
 
 static int attach_to_tasks(bool root_seized)
 {
@@ -2361,6 +2368,10 @@ int prepare_dummy_task_state(struct pstree_item *pi)
 int cr_restore_tasks(void)
 {
 	int ret = -1;
+
+	init_im_pointer();
+
+	init_imgset_hash();
 
 	if (init_service_fd())
 		return 1;
@@ -3133,7 +3144,9 @@ static void *restorer_munmap_addr(CoreEntry *core, void *restorer_blob)
 }
 
 void arch_rsti_init(struct pstree_item *p) __attribute__((weak));
-void arch_rsti_init(struct pstree_item *p) {}
+void arch_rsti_init(struct pstree_item *p)
+{
+}
 
 static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, unsigned long alen, CoreEntry *core)
 {

@@ -18,6 +18,7 @@
 #include "xmalloc.h"
 #include "protobuf.h"
 #include "images/pagemap.pb-c.h"
+#include "imgset.h"
 
 #ifndef SEEK_DATA
 #define SEEK_DATA 3
@@ -130,6 +131,10 @@ static int advance(struct page_read *pr)
 	pr->pe = pr->pmes[pr->curr_pme];
 	pr->cvaddr = pr->pe->vaddr;
 
+	if (opts.image_type == IMAGE_TYPE_IM) {
+		pr->pi_off = pr->pi_off_im[pr->curr_pme];
+	}
+
 	return 1;
 }
 
@@ -162,7 +167,7 @@ static int seek_pagemap(struct page_read *pr, unsigned long vaddr)
 
 		if (end <= vaddr)
 			skip_pagemap_pages(pr, end - pr->cvaddr);
-	adv:; /* otherwise "label at end of compound stmt" gcc error */
+adv:; /* otherwise "label at end of compound stmt" gcc error */
 	} while (advance(pr));
 
 	return 0;
@@ -539,7 +544,7 @@ static int process_async_reads(struct page_read *pr)
 
 		pr_debug("Read piov iovs %d, from %ju, len %ju, first %p:%zu\n", piov->nr, piov->from,
 			 piov->end - piov->from, piov->to->iov_base, piov->to->iov_len);
-	more:
+more:
 		ret = preadv(fd, piov->to, piov->nr, piov->from);
 		if (fault_injected(FI_PARTIAL_PAGES)) {
 			/*
@@ -699,6 +704,7 @@ static int init_pagemaps(struct page_read *pr)
 {
 	off_t fsize;
 	int nr_pmes, nr_realloc;
+	struct im_img_desc *imh;
 
 	if (opts.stream) {
 		/*
@@ -720,6 +726,7 @@ static int init_pagemaps(struct page_read *pr)
 	nr_realloc = nr_pmes / 2;
 
 	pr->pmes = xzalloc(nr_pmes * sizeof(*pr->pmes));
+	pr->pi_off_im = xzalloc(nr_pmes * sizeof(unsigned long));
 	if (!pr->pmes)
 		return -1;
 
@@ -727,12 +734,24 @@ static int init_pagemaps(struct page_read *pr)
 	pr->curr_pme = -1;
 
 	while (1) {
-		int ret = pb_read_one_eof(pr->pmi, &pr->pmes[pr->nr_pmes], PB_PAGEMAP);
+		int ret;
+		if (opts.image_type == IMAGE_TYPE_IM) {
+			struct im_img *img = (struct im_img *)pr->pmi;
+			if(pr->nr_pmes == 0){
+				pr->pi_off_im[pr->nr_pmes] = img->offset + img->size + sizeof(struct im_img_desc) + sizeof(struct im_img_header);
+			}
+			else{
+				imh = base_ptr + img->offset - sizeof(struct im_img_desc);
+				pr->pi_off_im[pr->nr_pmes] = img->offset + imh->size + sizeof(struct im_img_desc)  + sizeof(struct im_img_header);
+			}
+			pr_info("pagemap entry %d get offset %lu\n", pr->nr_pmes, pr->pi_off_im[pr->nr_pmes]);
+		}
+		ret = pb_read_one_eof(pr->pmi, &pr->pmes[pr->nr_pmes], PB_PAGEMAP);
 		if (ret < 0)
 			goto free_pagemaps;
 		if (ret == 0)
 			break;
-
+		
 		init_compat_pagemap_entry(pr->pmes[pr->nr_pmes]);
 
 		pr->nr_pmes++;
@@ -740,6 +759,7 @@ static int init_pagemaps(struct page_read *pr)
 			PagemapEntry **new;
 			nr_pmes += nr_realloc;
 			new = xrealloc(pr->pmes, nr_pmes * sizeof(*pr->pmes));
+			pr->pi_off_im = xrealloc(pr->pi_off_im, nr_pmes * sizeof(unsigned long));
 			if (!new)
 				goto free_pagemaps;
 			pr->pmes = new;

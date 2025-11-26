@@ -249,6 +249,7 @@ struct cr_options {
 	 * explicitly request it as it comes with many limitations.
 	 */
 	int unprivileged;
+	int image_type;
 };
 
 extern struct cr_options opts;

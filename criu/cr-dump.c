@@ -231,7 +231,7 @@ static int check_thread_rseq(pid_t tid, const struct parasite_check_rseq *ti_rse
 	return 0;
 }
 
-struct cr_imgset *glob_imgset;
+struct imgset *glob_imgset;
 
 static int collect_fds(pid_t pid, struct parasite_drain_fd **dfds)
 {
@@ -332,7 +332,7 @@ static int dump_task_exe_link(pid_t pid, MmEntry *mm)
 	return ret;
 }
 
-static int dump_task_fs(pid_t pid, struct parasite_dump_misc *misc, struct cr_imgset *imgset)
+static int dump_task_fs(pid_t pid, struct parasite_dump_misc *misc, struct imgset *imgset)
 {
 	struct fd_parms p;
 	FsEntry fe = FS_ENTRY__INIT;
@@ -507,7 +507,7 @@ err:
 }
 
 static int dump_task_mm(pid_t pid, const struct proc_pid_stat *stat, const struct parasite_dump_misc *misc,
-			const struct vm_area_list *vma_area_list, const struct cr_imgset *imgset)
+			const struct vm_area_list *vma_area_list, const struct imgset *imgset)
 {
 	MmEntry mme = MM_ENTRY__INIT;
 	struct vma_area *vma_area;
@@ -722,7 +722,7 @@ err:
 	return -1;
 }
 
-static int dump_task_ids(struct pstree_item *item, const struct cr_imgset *cr_imgset)
+static int dump_task_ids(struct pstree_item *item, const struct imgset *cr_imgset)
 {
 	return pb_write_one(img_from_set(cr_imgset, CR_FD_IDS), item->ids, PB_IDS);
 }
@@ -776,9 +776,9 @@ int dump_thread_core(int pid, CoreEntry *core, const struct parasite_dump_thread
 }
 
 static int dump_task_core_all(struct parasite_ctl *ctl, struct pstree_item *item, const struct proc_pid_stat *stat,
-			      const struct cr_imgset *cr_imgset, const struct parasite_dump_misc *misc)
+			      const struct imgset *cr_imgset, const struct parasite_dump_misc *misc)
 {
-	struct cr_img *img;
+	void *img;
 	CoreEntry *core = item->core[0];
 	pid_t pid = item->pid->real;
 	int ret = -1;
@@ -1560,7 +1560,7 @@ static int dump_one_task(struct pstree_item *item, InventoryEntry *parent_ie)
 	struct parasite_ctl *parasite_ctl;
 	int ret, exit_code = -1;
 	struct parasite_dump_misc misc;
-	struct cr_imgset *cr_imgset = NULL;
+	struct imgset *imgset = NULL;
 	struct parasite_drain_fd *dfds = NULL;
 	struct proc_posix_timers_stat proc_args;
 	struct mem_dump_ctl mdc;
@@ -1682,11 +1682,11 @@ static int dump_one_task(struct pstree_item *item, InventoryEntry *parent_ie)
 		goto err_cure;
 	}
 
-	cr_imgset = cr_task_imgset_open(vpid(item), O_DUMP);
-	if (!cr_imgset)
+	imgset = opts.image_type ? (struct imgset *)im_task_imgset_open(vpid(item), O_DUMP) : (struct imgset *)cr_task_imgset_open(vpid(item), O_DUMP);
+	if (!imgset)
 		goto err_cure;
 
-	ret = dump_task_ids(item, cr_imgset);
+	ret = dump_task_ids(item, imgset);
 	if (ret) {
 		pr_err("Dump ids (pid: %d) failed with %d\n", pid, ret);
 		goto err_cure;
@@ -1732,7 +1732,7 @@ static int dump_one_task(struct pstree_item *item, InventoryEntry *parent_ie)
 		goto err_cure;
 	}
 
-	ret = dump_task_core_all(parasite_ctl, item, &pps_buf, cr_imgset, &misc);
+	ret = dump_task_core_all(parasite_ctl, item, &pps_buf, imgset, &misc);
 	if (ret) {
 		pr_err("Dump core (pid: %d) failed with %d\n", pid, ret);
 		goto err_cure;
@@ -1769,23 +1769,26 @@ static int dump_one_task(struct pstree_item *item, InventoryEntry *parent_ie)
 		goto err;
 	}
 
-	ret = dump_task_mm(pid, &pps_buf, &misc, &vmas, cr_imgset);
+	ret = dump_task_mm(pid, &pps_buf, &misc, &vmas, imgset);
 	if (ret) {
 		pr_err("Dump mappings (pid: %d) failed with %d\n", pid, ret);
 		goto err;
 	}
 
-	ret = dump_task_fs(pid, &misc, cr_imgset);
+	ret = dump_task_fs(pid, &misc, imgset);
 	if (ret) {
 		pr_err("Dump fs (pid: %d) failed with %d\n", pid, ret);
 		goto err;
 	}
-
+	pr_info("dump_one_task done\n");
 	exit_code = 0;
 err:
-	close_cr_imgset(&cr_imgset);
+	close_imgset(&imgset);
+	pr_info("close imgset done\n");
 	close_pid_proc();
+	pr_info("close pid proc done\n");
 	free_mappings(&vmas);
+	pr_info("vma free done\n");
 	xfree(dfds);
 	return exit_code;
 
@@ -2047,7 +2050,7 @@ static int cr_dump_finish(int ret)
 	if (disconnect_from_page_server())
 		ret = -1;
 
-	close_cr_imgset(&glob_imgset);
+	close_imgset(&glob_imgset);
 
 	if (bfd_flush_images())
 		ret = -1;
@@ -2133,65 +2136,67 @@ static int cr_dump_finish(int ret)
 	return post_dump_ret ?: (ret != 0);
 }
 
-
-
-int cr_dump_test(){
+int cr_dump_test()
+{
 	TaskKobjIdsEntry *ids;
 	struct im_img *img;
 	int ret = -1;
 	pr_info("cr_dump_test called\n");
-	
-	ids = xmalloc(sizeof(*ids));
-    
-    task_kobj_ids_entry__init(ids);
-    
-    // 2. 填充字段值
 
-    // 填充 required 字段 (直接赋值，没有 has_... 标志)
-    ids->vm_id = 1001;
-    ids->files_id = 1002;
-    ids->fs_id = 1003;
-    ids->sighand_id = 1004;
+	ids = xmalloc(sizeof(*ids));
+
+	task_kobj_ids_entry__init(ids);
+
+	// 2. 填充字段值
+
+	// 填充 required 字段 (直接赋值，没有 has_... 标志)
+	ids->vm_id = 1001;
+	ids->files_id = 1002;
+	ids->fs_id = 1003;
+	ids->sighand_id = 1004;
 	pr_info("vm_id: %u, files_id: %u, fs_id: %u, sighand_id: %u\n",
 		ids->vm_id, ids->files_id, ids->fs_id, ids->sighand_id);
 
-    // Optional fields
-    ids->has_pid_ns_id = true;
-    ids->pid_ns_id = 2001;
+	// Optional fields
+	ids->has_pid_ns_id = true;
+	ids->pid_ns_id = 2001;
 
-    ids->has_net_ns_id = true;
-    ids->net_ns_id = 2002;
+	ids->has_net_ns_id = true;
+	ids->net_ns_id = 2002;
 
-    ids->has_mnt_ns_id = true;
-    ids->mnt_ns_id = 2003;
+	ids->has_mnt_ns_id = true;
+	ids->mnt_ns_id = 2003;
 
 	init_im_pointer();
 	im_img_checkpoint->magic = 114514;
 	im_img_checkpoint->img_nr = 0;
 	im_img_checkpoint->total_size = 0;
 
-	img = open_image_im(CR_FD_IDS, O_CREAT);
-	ret = pb_write_one_im(img, ids, PB_IDS);
-	if(ret) pr_info("pb_write_one_im failed\n");
+	img = open_image_generic(CR_FD_IDS, O_CREAT);
+	ret = pb_write_one(img, ids, PB_IDS);
+	if (ret)
+		pr_info("pb_write_one_im failed\n");
 
 	return 0;
 }
 
-int cr_restore_test(){
+int cr_restore_test()
+{
 	struct im_img *img;
 	TaskKobjIdsEntry *ids;
 	int ret;
 	pr_info("cr_restore_test called\n");
 	init_im_pointer();
-	if(im_img_checkpoint->magic != 114514){
+	if (im_img_checkpoint->magic != 114514) {
 		pr_err("im_img_checkpoint->magic != 114514, value: %lu\n", im_img_checkpoint->magic);
 		return -1;
 	}
 	pr_info("im_img_checkpoint->img_nr: %d, total_size: %lu\n", im_img_checkpoint->img_nr, im_img_checkpoint->total_size);
-	img = open_image_im(CR_FD_IDS, O_RDONLY);
-	ret = do_pb_read_one_im(img, (void **)&ids, PB_IDS);
-	if(ret) pr_info("vm_id: %u, files_id: %u, fs_id: %u, sighand_id: %u\n",
-		ids->vm_id, ids->files_id, ids->fs_id, ids->sighand_id);
+	img = open_image(CR_FD_IDS, O_RDONLY);
+	ret = pb_read_one(img, (void **)&ids, PB_IDS);
+	if (ret)
+		pr_info("vm_id: %u, files_id: %u, fs_id: %u, sighand_id: %u\n",
+			ids->vm_id, ids->files_id, ids->fs_id, ids->sighand_id);
 	return 0;
 }
 
@@ -2215,6 +2220,10 @@ int cr_dump_tasks(pid_t pid)
 	 *  maximum.
 	 */
 	rlimit_unlimit_nofile();
+
+	init_im_pointer();
+	im_img_checkpoint->total_size = 0;
+	im_img_checkpoint->img_nr = 0;
 
 	root_item = alloc_pstree_item();
 	if (!root_item)
@@ -2291,7 +2300,11 @@ int cr_dump_tasks(pid_t pid)
 	if (collect_namespaces(true) < 0)
 		goto err;
 
-	glob_imgset = cr_glob_imgset_open(O_DUMP);
+	if (opts.image_type == IMAGE_TYPE_CR) {
+		glob_imgset = (struct imgset *)cr_glob_imgset_open(O_DUMP);
+	} else {
+		glob_imgset = (struct imgset *)im_glob_imgset_open(O_DUMP);
+	}
 	if (!glob_imgset)
 		goto err;
 
@@ -2308,8 +2321,9 @@ int cr_dump_tasks(pid_t pid)
 		if (dump_one_task(item, parent_ie))
 			goto err;
 	}
-
+	pr_info("dump here\n");
 	if (parent_ie) {
+		pr_info("dump parent\n");
 		inventory_entry__free_unpacked(parent_ie, NULL);
 		parent_ie = NULL;
 	}
@@ -2320,6 +2334,7 @@ int cr_dump_tasks(pid_t pid)
 	 * given to some newer thread since then, we may be unable to dump
 	 * all this.
 	 */
+	pr_info("dead_pid_confilict exec\n");
 	if (dead_pid_conflict())
 		goto err;
 

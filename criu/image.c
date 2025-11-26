@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <stdarg.h>
 #include <fcntl.h>
@@ -29,7 +30,10 @@ char dump_criu_run_id[RUN_ID_HASH_LENGTH];
 void *data_head = NULL;
 void *base_ptr = NULL;
 struct im_img_header *im_img_checkpoint = NULL;
-int im_imgset_hash[CR_FD_MAX];
+struct img_entry *im_imgset_hash[CR_FD_MAX] = { NULL };
+int daxfd = -1;
+struct im_img_desc *current_im_desc = NULL;
+unsigned long cxl_length = 0;
 
 struct inventory_plugin {
 	struct list_head node;
@@ -147,7 +151,6 @@ int check_img_inventory(bool restore)
 			 */
 			dump_criu_run_id[0] = NO_DUMP_CRIU_RUN_ID;
 		}
-
 	}
 
 	ret = 0;
@@ -204,7 +207,10 @@ int check_inventory_plugins(void)
 
 	return -1;
 }
-
+void close_image_im(struct im_img *img)
+{
+	xfree(img);
+}
 /**
  * Add plugin name to the inventory image. These values
  * can be used to identify required plugins during restore.
@@ -276,7 +282,7 @@ int write_img_inventory(InventoryEntry *he)
 	xfree(pe.plugins);
 
 	xfree(he->root_ids);
-	close_image(img);
+	close_image_generic(img);
 	if (ret < 0)
 		return -1;
 	return 0;
@@ -426,7 +432,9 @@ static struct cr_imgset *alloc_cr_imgset(int nr)
 
 	for (i = 0; i < nr; i++)
 		cr_imgset->_imgs[i] = NULL;
-	cr_imgset->fd_nr = nr;
+	cr_imgset->base.nr = nr;
+	cr_imgset->base._close_imgset = &close_cr_imgset;
+	cr_imgset->base.img_from_set = &cr_img_from_set;
 	return cr_imgset;
 }
 
@@ -437,7 +445,7 @@ static void __close_cr_imgset(struct cr_imgset *cr_imgset)
 	if (!cr_imgset)
 		return;
 
-	for (i = 0; i < cr_imgset->fd_nr; i++) {
+	for (i = 0; i < cr_imgset->base.nr; i++) {
 		if (!cr_imgset->_imgs[i])
 			continue;
 		close_image(cr_imgset->_imgs[i]);
@@ -445,16 +453,44 @@ static void __close_cr_imgset(struct cr_imgset *cr_imgset)
 	}
 }
 
-void close_cr_imgset(struct cr_imgset **cr_imgset)
+void close_cr_imgset(struct imgset **cr_imgset)
 {
-	if (!cr_imgset || !*cr_imgset)
+	struct cr_imgset **p_cr_imgset;
+	p_cr_imgset = (struct cr_imgset **)cr_imgset;
+	if (!p_cr_imgset || !*p_cr_imgset)
 		return;
 
-	__close_cr_imgset(*cr_imgset);
+	__close_cr_imgset((*p_cr_imgset));
 
-	xfree((*cr_imgset)->_imgs);
-	xfree(*cr_imgset);
+	xfree((*p_cr_imgset)->_imgs);
+	xfree(*p_cr_imgset);
 	*cr_imgset = NULL;
+}
+
+void __close_im_imgset(struct im_imgset *im_imgset)
+{
+	unsigned int i;
+	pr_info("img in imgset count is %d\n", im_imgset->base.nr);
+	for (i = 0; i < im_imgset->base.nr; i++) {
+		if (im_imgset->_imgs[i] == NULL)
+			continue;
+		pr_info("close img %d\n", i);
+		close_image_im(im_imgset->_imgs[i]);
+		im_imgset->_imgs[i] = NULL;
+	}
+}
+
+void close_im_imgset(struct imgset **im_imgset)
+{
+	struct im_imgset **p_im_imgset;
+	p_im_imgset = (struct im_imgset **)im_imgset;
+	if (!p_im_imgset || !*p_im_imgset)
+		return;
+	__close_im_imgset(*p_im_imgset);
+
+	xfree((*p_im_imgset)->_imgs);
+	xfree(*p_im_imgset);
+	*im_imgset = NULL;
 }
 
 struct cr_imgset *cr_imgset_open_range(int pid, int from, int to, unsigned long flags)
@@ -467,7 +503,7 @@ struct cr_imgset *cr_imgset_open_range(int pid, int from, int to, unsigned long 
 		goto err;
 
 	from++;
-	imgset->fd_off = from;
+	imgset->base.offset = from;
 	for (i = from; i < to; i++) {
 		struct cr_img *img;
 
@@ -485,23 +521,74 @@ struct cr_imgset *cr_imgset_open_range(int pid, int from, int to, unsigned long 
 	return imgset;
 
 err:
-	close_cr_imgset(&imgset);
+	close_imgset((struct imgset **)(&imgset));
 	return NULL;
 }
 
 void init_im_pointer(void)
 {
-  if(base_ptr == NULL){
-	int daxfd = open("/dev/dax0.0", O_RDWR);
-	unsigned long cxl_size = 8ULL * 1024 * 1024 * 1024; //8GB
-	void* cxl_ptr = mmap(NULL, cxl_size, PROT_READ | PROT_WRITE, MAP_SHARED, daxfd, 0);
-	pr_info("CXL mapped at %p\n", cxl_ptr);
-	base_ptr = cxl_ptr;
-	data_head = base_ptr;
-	im_img_checkpoint = (struct im_img_header *)base_ptr;
-	data_head += sizeof(struct im_img_header);
-	base_ptr = data_head;
-  }
+	if (base_ptr == NULL) {
+		int _daxfd = open("/mnt/tmp/chunk_device", O_RDWR);
+		unsigned long cxl_size = 1ULL * 1024 * 1024 * 1024; //8GB
+		void *cxl_ptr = mmap(NULL, cxl_size, PROT_READ | PROT_WRITE, MAP_SHARED, _daxfd, 0);
+		pr_info("CXL mapped at %p\n", cxl_ptr);
+		cxl_length = cxl_size;
+		daxfd = _daxfd;
+		base_ptr = cxl_ptr;
+		data_head = base_ptr;
+		im_img_checkpoint = (struct im_img_header *)base_ptr;
+		data_head += sizeof(struct im_img_header);
+		base_ptr = data_head;
+	}
+}
+
+struct img_entry *_alloc_new_entry(void *scan_ptr, struct im_img_desc *imh)
+{
+	struct img_entry *new_entry = xmalloc(sizeof(struct img_entry));
+	new_entry->offset = (unsigned long)(scan_ptr - base_ptr + sizeof(struct im_img_desc));
+	new_entry->id = imh->id;
+	new_entry->next_entry = NULL;
+	new_entry->size = imh->size;
+	new_entry->next_offset = imh->next_desc;
+	new_entry->total_size = imh->size;
+	return new_entry;
+}
+
+void init_imgset_hash(void)
+{
+	int nr = im_img_checkpoint->img_nr;
+	int i = 0;
+	void *scan_ptr = data_head;
+	struct im_img_desc *imh;
+	pr_info("read img nr is %d\n", im_img_checkpoint->img_nr);
+	for (i = 0; i < nr; i++) {
+		imh = (struct im_img_desc *)scan_ptr;
+		pr_info("img type %d id %lu size %lu next_desc %lu\n", imh->type, imh->id, imh->size, imh->next_desc);
+		if (im_imgset_hash[imh->type] == NULL) {
+			pr_info("first entry for type %d\n", imh->type);
+			im_imgset_hash[imh->type] = _alloc_new_entry(scan_ptr, imh);
+		} else {
+			struct img_entry *cur_entry = im_imgset_hash[imh->type];
+			int flag = 0;
+			if (cur_entry->id == imh->id) {
+				flag = 1;
+				cur_entry->total_size += imh->size;
+			}
+			while (cur_entry->next_entry != NULL) {
+				if (cur_entry->id == imh->id) {
+					flag = 1;
+					cur_entry->total_size += imh->size;
+					break;
+				}
+				cur_entry = cur_entry->next_entry;
+			}
+			if (!flag) {
+				pr_info("add new entry for type %d\n", imh->type);
+				cur_entry->next_entry = _alloc_new_entry(scan_ptr, imh);
+			}
+		}
+		scan_ptr += sizeof(struct im_img_desc) + imh->size;
+	}
 }
 
 struct im_imgset *im_imgset_open_range(int pid, int from, int to, unsigned long flags)
@@ -512,15 +599,17 @@ struct im_imgset *im_imgset_open_range(int pid, int from, int to, unsigned long 
 	if (!imgset)
 		goto err;
 
-	imgset->img_nr = to - from;
-	imgset->img_off = from;
-	imgset->_imgs = xmalloc(imgset->img_nr * sizeof(struct im_img *));
-	
+	imgset->base.img_from_set = &im_img_from_set;
+	imgset->base._close_imgset = &close_im_imgset;
+
 	from++;
+	imgset->base.nr = to - from;
+	imgset->base.offset = from;
+	imgset->_imgs = xmalloc(imgset->base.nr * sizeof(struct im_img *));
 	for (i = from; i < to; i++) {
 		struct im_img *img;
 
-		img = open_image_im(i, flags);
+		img = open_image(i, flags, pid);
 		if (!img) {
 			if (!(flags & O_CREAT))
 				continue;
@@ -531,9 +620,9 @@ struct im_imgset *im_imgset_open_range(int pid, int from, int to, unsigned long 
 	}
 
 	return imgset;
-	err:
-	  /*TODO:error in imgset*/
-	 return NULL;
+err:
+	/*TODO:error in imgset*/
+	return NULL;
 }
 
 struct cr_imgset *cr_task_imgset_open(int pid, int mode)
@@ -551,14 +640,18 @@ struct cr_imgset *cr_glob_imgset_open(int mode)
 	return cr_imgset_open(-1 /* ignored */, GLOB, mode);
 }
 
+struct im_imgset *im_glob_imgset_open(int mode)
+{
+	return im_imgset_open(-1, GLOB, mode);
+}
+
 static int do_open_image(struct cr_img *img, int dfd, int type, unsigned long flags, char *path);
 
-struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...)
+struct cr_img *open_image_at_cr(int dfd, int type, unsigned long flags, va_list args)
 {
 	struct cr_img *img;
 	unsigned long oflags;
 	char path[PATH_MAX];
-	va_list args;
 	bool lazy = false;
 
 	if (dfd == -1) {
@@ -572,9 +665,7 @@ struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...)
 
 	oflags = flags | imgset_template[type].oflags;
 
-	va_start(args, flags);
 	vsnprintf(path, PATH_MAX, imgset_template[type].fmt, args);
-	va_end(args);
 
 	if (lazy) {
 		img->fd = LAZY_IMG_FD;
@@ -593,83 +684,89 @@ struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...)
 	return img;
 }
 
-struct im_img *open_image_im(int type, unsigned long flags)
+void *open_image_generic(int type, unsigned long flags, ...)
+{
+	va_list args;
+	void *img = NULL;
+	pr_info("Opening image type %d with flags 0x%lx\n", type, flags);
+	va_start(args, flags);
+	if (opts.image_type == IMAGE_TYPE_CR) {
+		img = open_image_at_cr(-1, type, flags, args);
+	} else if (opts.image_type == IMAGE_TYPE_IM) {
+		img = open_image_im(type, flags, args);
+	}
+	va_end(args);
+	pr_info("Opened image type %d at %p\n", type, img);
+	return img;
+}
+
+void *open_image_at_generic(int dfd, int type, unsigned long flags, ...)
+{
+	va_list args;
+	void *img = NULL;
+	pr_info("Opening image type %d at dfd %d with flags 0x%lx\n", type, dfd, flags);
+	va_start(args, flags);
+	if (opts.image_type == IMAGE_TYPE_CR) {
+		img = open_image_at_cr(dfd, type, flags, args);
+	} else if (opts.image_type == IMAGE_TYPE_IM) {
+		img = open_image_im(type, flags, args);
+	}
+	va_end(args);
+	pr_info("Opened image type %d at %p\n", type, img);
+	return img;
+}
+
+unsigned long arg_parse(int type, va_list args);
+
+struct im_img *open_image_im(int type, unsigned long flags, va_list args)
 {
 	struct im_img *img;
 	unsigned long oflags;
-	struct im_img_desc *imh;
+	unsigned long id;
+	struct img_entry *cur_entry;
 	img = xmalloc(sizeof(*img));
-	
-	if (!img)
-	{
+
+	if (!img) {
 		return NULL;
 	}
-
+	id = arg_parse(type, args);
+	img->id = id;
 	oflags = flags | imgset_template[type].oflags;
-	/*TODO: write metadata to identify img*/
 
-	if(flags & O_CREAT){
+	if ((oflags & O_ACCMODE) == O_RDONLY) {
+		if (!im_imgset_hash[type]) {
+			pr_err("No such image type %d in checkpoint\n", type);
+			img->type = type;
+			img->oflags = oflags;
+			img->offset = 0;
+			img->size = 0;
+			return img;
+		}
+		cur_entry = im_imgset_hash[type];
+		while (cur_entry != NULL) {
+			if (cur_entry->id == id) {
+				img->type = type;
+				img->oflags = oflags;
+				img->offset = cur_entry->offset;
+				img->size = cur_entry->total_size;
+				pr_info("Found img type %d, offset %ld, size %ld\n", img->type, img->offset, img->size);
+				break;
+			}
+			cur_entry = cur_entry->next_entry;
+		}
+		if (!cur_entry) {
+			pr_err("No such image id %lu for type %d in checkpoint\n", id, type);
+			xfree(img);
+			return NULL;
+		}
+	} else {
 		img->type = type;
 		img->oflags = oflags;
 		img->offset = 0;
 		img->size = 0;
 	}
-	else if(flags & O_RDONLY){
-		if(!im_imgset_hash[type]){
-			while(data_head - base_ptr < im_img_checkpoint->total_size){
-				imh = data_head;
-				data_head += sizeof(struct im_img_desc);
-				if (imh->type <= 0 || imh->type >= CR_FD_MAX) {
-					pr_err("Corrupted image header\n");
-					xfree(img);
-					return NULL;
-				}
-				im_imgset_hash[imh->type] = data_head - base_ptr;
-				
-				if (imh->type == type) {
-					img->type = imh->type;
-					img->offset = data_head - base_ptr;
-					img->size = imh->size;
-					img->oflags = oflags;
-					break;
-				}
-				data_head += imh->size;
-			}
-			if(!im_imgset_hash[type]){
-				pr_err("No image of type %d\n", type);
-				xfree(img);
-				return NULL;
-			}
 
-		}
-		else{
-			img->type = type;
-			
-			img->offset = im_imgset_hash[type];
-			imh = base_ptr + img->offset - sizeof(struct im_img_desc);
-			img->size = imh->size;
-			img->oflags = oflags;
-		}
-		
-
-	}
-	else{
-		imh = data_head;
-		data_head += sizeof(struct im_img_desc);
-		if (imh->type <= 0 || imh->type >= CR_FD_MAX) {
-			pr_err("Corrupted image header\n");
-			xfree(img);
-			return NULL;
-		}
-		img->type = imh->type;
-		img->offset = data_head - base_ptr;
-		img->size = imh->size;
-		img->oflags = oflags;
-		data_head += imh->size;
-	}
-	
 	return img;
-	
 }
 
 static inline u32 head_magic(int oflags)
@@ -801,7 +898,6 @@ err:
 	return -1;
 }
 
-
 int open_image_lazy(struct cr_img *img)
 {
 	int dfd;
@@ -819,7 +915,7 @@ int open_image_lazy(struct cr_img *img)
 	return 0;
 }
 
-void close_image(struct cr_img *img)
+void close_image_cr(struct cr_img *img)
 {
 	if (lazy_image(img)) {
 		/*
@@ -833,6 +929,35 @@ void close_image(struct cr_img *img)
 		bclose(&img->_x);
 
 	xfree(img);
+}
+
+void close_image_generic(void *img)
+{
+	if (opts.image_type == IMAGE_TYPE_CR) {
+		close_image_cr((struct cr_img *)img);
+	} else if (opts.image_type == IMAGE_TYPE_IM) {
+		close_image_im((struct im_img *)img);
+	}
+}
+
+static inline bool empty_image_cr(struct cr_img *img)
+{
+	return img && img->_x.fd == EMPTY_IMG_FD;
+}
+
+static inline bool empty_image_im(struct im_img *img)
+{
+	return img && img->size == 0;
+}
+
+bool empty_image_generic(void *img)
+{
+	if (opts.image_type == IMAGE_TYPE_CR) {
+		return empty_image_cr((struct cr_img *)img);
+	} else if (opts.image_type == IMAGE_TYPE_IM) {
+		return empty_image_im((struct im_img *)img);
+	}
+	return true;
 }
 
 struct cr_img *img_from_fd(int fd)
@@ -909,6 +1034,8 @@ int open_parent(int dfd, int *pfd)
 	struct stat st;
 
 	*pfd = -1;
+	pr_debug("No parent images directory provided\n");
+	return 0;
 	/* Check if the parent symlink exists */
 	if (fstatat(dfd, CR_PARENT_LINK, &st, AT_SYMLINK_NOFOLLOW) && errno == ENOENT) {
 		pr_debug("No parent images directory provided\n");
@@ -940,7 +1067,7 @@ void up_page_ids_base(void)
 	page_ids += 0x10000;
 }
 
-struct cr_img *open_pages_image_at(int dfd, unsigned long flags, struct cr_img *pmi, u32 *id)
+void *open_pages_image_at(int dfd, unsigned long flags, void *pmi, u32 *id)
 {
 	if (flags == O_RDONLY || flags == O_RDWR) {
 		PagemapHead *h;
@@ -958,7 +1085,7 @@ struct cr_img *open_pages_image_at(int dfd, unsigned long flags, struct cr_img *
 	return open_image_at(dfd, CR_FD_PAGES, flags, *id);
 }
 
-struct cr_img *open_pages_image(unsigned long flags, struct cr_img *pmi, u32 *id)
+void *open_pages_image(unsigned long flags, void *pmi, u32 *id)
 {
 	return open_pages_image_at(get_service_fd(IMG_FD_OFF), flags, pmi, id);
 }
@@ -969,11 +1096,23 @@ struct cr_img *open_pages_image(unsigned long flags, struct cr_img *pmi, u32 *id
  *	0  on success
  *	-1 on error (error message is printed)
  */
-int write_img_buf(struct cr_img *img, const void *ptr, int size)
+int write_img_buf(void *img, const void *ptr, int size)
 {
 	int ret;
-
-	ret = bwrite(&img->_x, ptr, size);
+	void *cpy_ret = NULL;
+	if (opts.image_type == IMAGE_TYPE_CR)
+		ret = bwrite(&((struct cr_img *)(img))->_x, ptr, size);
+	else {
+		pr_err("write_img_buf is not support now\n");
+		return -1;
+		cpy_ret = memcpy(base_ptr + ((struct im_img *)(img))->offset + ((struct im_img *)(img))->size, ptr, size);
+		if (cpy_ret == NULL)
+			ret = -1;
+		else {
+			ret = size;
+			((struct im_img *)(img))->size += size;
+		}
+	}
 	if (ret == size)
 		return 0;
 
@@ -991,11 +1130,26 @@ int write_img_buf(struct cr_img *img, const void *ptr, int size)
  *	0  on EOF (silently)
  *	-1 on error (error message is printed)
  */
-int read_img_buf_eof(struct cr_img *img, void *ptr, int size)
+int read_img_buf_eof(void *img, void *ptr, int size)
 {
 	int ret;
+	void *cpy_ret = NULL;
 
-	ret = bread(&img->_x, ptr, size);
+	if (opts.image_type == IMAGE_TYPE_CR)
+		ret = bread(&((struct cr_img *)(img))->_x, ptr, size);
+	else {
+		pr_err("read_img_buf is not supported now\n");
+		return -1;
+		if (((struct im_img *)(img))->size < size) {
+			size = ((struct im_img *)(img))->size;
+		}
+		cpy_ret = memcpy(ptr, base_ptr + ((struct im_img *)(img))->offset, size);
+		if (cpy_ret == NULL)
+			ret = -1;
+		else
+			ret = size;
+	}
+
 	if (ret == size)
 		return 1;
 	if (ret == 0)
@@ -1014,7 +1168,7 @@ int read_img_buf_eof(struct cr_img *img, void *ptr, int size)
  *	1  on success
  *	-1 on error or EOF (error message is printed)
  */
-int read_img_buf(struct cr_img *img, void *ptr, int size)
+int read_img_buf(void *img, void *ptr, int size)
 {
 	int ret;
 
@@ -1032,7 +1186,7 @@ int read_img_buf(struct cr_img *img, void *ptr, int size)
  * the buffer and puts the '\0' at the end
  */
 
-int read_img_str(struct cr_img *img, char **pstr, int size)
+int read_img_str(void *img, char **pstr, int size)
 {
 	int ret;
 	char *str;
@@ -1052,14 +1206,55 @@ int read_img_str(struct cr_img *img, char **pstr, int size)
 	return 0;
 }
 
-off_t img_raw_size(struct cr_img *img)
+off_t img_raw_size(void *img)
 {
 	struct stat stat;
 
-	if (fstat(img->_x.fd, &stat)) {
+	if (opts.image_type == IMAGE_TYPE_IM) {
+		return ((struct im_img *)(img))->size;
+	}
+	if (fstat(((struct cr_img *)(img))->_x.fd, &stat)) {
 		pr_perror("Failed to get image stats");
 		return -1;
 	}
 
 	return stat.st_size;
+}
+
+int img_raw_fd(void *img)
+{
+	if (!img)
+		return -1;
+	if (opts.image_type == IMAGE_TYPE_CR) {
+		if (lazy_image((struct cr_img *)img) && open_image_lazy((struct cr_img *)img))
+			return -1;
+
+		BUG_ON(bfd_buffered(&((struct cr_img *)img)->_x));
+		return ((struct cr_img *)img)->_x.fd;
+	} else if (opts.image_type == IMAGE_TYPE_IM) {
+		pr_err("No support for raw fd");
+		return -1;
+	}
+	return -1;
+}
+
+unsigned long arg_parse(int type, va_list args)
+{
+	const char *arg_fmt;
+	unsigned long result = 0;
+	const char *p;
+	arg_fmt = imgset_template[type].fmt;
+	p = strchr(arg_fmt, '%');
+	if (!p) {
+		return 0;
+	}
+	if (p[1] == 'l') {
+		result = va_arg(args, unsigned long);
+	} else if (p[1] == 's') {
+		return 0;
+	} else {
+		result = va_arg(args, unsigned int);
+	}
+	pr_info("Parsed arg for type %d: %lu\n", type, result);
+	return result;
 }

@@ -500,7 +500,7 @@ err:
 	return ret;
 }
 
-static int dump_ipc_data(const struct cr_imgset *imgset)
+static int dump_ipc_data(const struct imgset *imgset)
 {
 	int ret;
 
@@ -522,9 +522,9 @@ static int dump_ipc_data(const struct cr_imgset *imgset)
 int dump_ipc_ns(int ns_id)
 {
 	int ret;
-	struct cr_imgset *imgset;
+	struct imgset *imgset;
 
-	imgset = cr_imgset_open(ns_id, IPCNS, O_DUMP);
+	imgset = opts.image_type ? (struct imgset *)im_imgset_open(ns_id, IPCNS, O_DUMP) : (struct imgset *)cr_imgset_open(ns_id, IPCNS, O_DUMP);
 	if (imgset == NULL)
 		return -1;
 
@@ -535,7 +535,7 @@ int dump_ipc_ns(int ns_id)
 	}
 
 err:
-	close_cr_imgset(&imgset);
+	close_imgset(&imgset);
 	return ret < 0 ? -1 : 0;
 }
 

@@ -363,7 +363,6 @@ skip_xids:
 		}
 	}
 
-
 	if (lsm_type != LSMTYPE__SELINUX) {
 		/*
 		 * SELinux does not support setting the process context for
@@ -1728,6 +1727,8 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	pid_t my_pid = sys_getpid();
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
+	unsigned long base_ptr = 0;
+	unsigned long cxl_size;
 
 	bootstrap_start = args->bootstrap_start;
 	bootstrap_len = args->bootstrap_len;
@@ -1741,6 +1742,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	n_helpers = args->helpers_n;
 	zombies = args->zombies;
 	n_zombies = args->zombies_n;
+	cxl_size = args->cxl_size;
 	*args->breakpoint = rst_sigreturn;
 #ifdef ARCH_HAS_LONG_PAGES
 	__page_size = args->page_size;
@@ -1888,6 +1890,14 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	/*
 	 * Now read the contents (if any)
 	 */
+	if (args->image_type) {
+		args->vma_ios_fd = sys_open("/mnt/tmp/chunk_device", O_RDONLY, 0);
+		base_ptr = sys_mmap(NULL, cxl_size, PROT_READ, MAP_SHARED, args->vma_ios_fd, 0);
+		if (IS_ERR((void *)base_ptr)) {
+			pr_err("Unable to reserve memory (%lx), fd is %d\n", base_ptr , args->vma_ios_fd);
+			goto core_restore_end;
+		}
+	}
 
 	rio = args->vma_ios;
 	for (i = 0; i < args->vma_ios_n; i++) {
@@ -1901,7 +1911,14 @@ __visible long __export_restore_task(struct task_restore_args *args)
 			 * If we're requested to punch holes in the file after reading we do
 			 * it to save memory. Limit the reads then to an arbitrary block size.
 			 */
-			r = preadv_limited(args->vma_ios_fd, iovs, nr, rio->off,
+
+			if(args->image_type){
+				pr_info("Using CXL-backed storage, copying data from base ptr %p offset %llu\n",
+					(void *)base_ptr, (unsigned long long)rio->off);
+				memcpy(iovs->iov_base, (void *)base_ptr + rio->off, iovs->iov_len);
+				r = iovs->iov_len;
+			}
+			else r = preadv_limited(args->vma_ios_fd, iovs, nr, rio->off,
 					   args->auto_dedup ? AUTO_DEDUP_OVERHEAD_BYTES : 0);
 			if (r < 0) {
 				pr_err("Can't read pages data (%d)\n", (int)r);

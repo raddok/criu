@@ -1,3 +1,4 @@
+#include "image.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -1508,7 +1509,9 @@ static int prepare_vma_ios(struct pstree_item *t, struct task_restore_args *ta)
 	if (!pages)
 		return -1;
 
-	ta->vma_ios_fd = img_raw_fd(pages);
+	ta->vma_ios_fd = opts.image_type ? daxfd : img_raw_fd(pages);
+	ta->cxl_size = cxl_length;
+	ta->image_type = opts.image_type;
 	return pagemap_render_iovec(&rsti(t)->vma_io, ta);
 }
 
