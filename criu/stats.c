@@ -156,8 +156,6 @@ void write_stats(int what)
 	StatsEntry stats = STATS_ENTRY__INIT;
 	DumpStatsEntry ds_entry = DUMP_STATS_ENTRY__INIT;
 	RestoreStatsEntry rs_entry = RESTORE_STATS_ENTRY__INIT;
-	char *name;
-	struct cr_img *img;
 
 	pr_info("Writing stats\n");
 	if (what == DUMP_STATS) {
@@ -186,7 +184,6 @@ void write_stats(int what)
 		ds_entry.shpages_written = dstats->counts[CNT_SHPAGES_WRITTEN];
 		ds_entry.has_shpages_written = true;
 
-		name = "dump";
 	} else if (what == RESTORE_STATS) {
 		stats.restore = &rs_entry;
 
@@ -198,15 +195,14 @@ void write_stats(int what)
 		encode_time(TIME_FORK, &rs_entry.forking_time);
 		encode_time(TIME_RESTORE, &rs_entry.restore_time);
 
-		name = "restore";
 	} else
 		return;
 
-	img = open_image_at(AT_FDCWD, CR_FD_STATS, O_DUMP, name);
-	if (img) {
-		pb_write_one(img, &stats, PB_STATS);
-		close_image(img);
-	}
+	// img = open_image_at(AT_FDCWD, CR_FD_STATS, O_DUMP, name);
+	// if (img) {
+	// 	pb_write_one(img, &stats, PB_STATS);
+	// 	close_image(img);
+	// }
 
 	if (opts.display_stats)
 		display_stats(what, &stats);

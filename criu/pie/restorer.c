@@ -1891,10 +1891,10 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	 * Now read the contents (if any)
 	 */
 	if (args->image_type) {
-		args->vma_ios_fd = sys_open("/mnt/tmp/chunk_device", O_RDONLY, 0);
+		args->vma_ios_fd = sys_open("/dev/dax0.0", O_RDONLY, 0);
 		base_ptr = sys_mmap(NULL, cxl_size, PROT_READ, MAP_SHARED, args->vma_ios_fd, 0);
 		if (IS_ERR((void *)base_ptr)) {
-			pr_err("Unable to reserve memory (%lx), fd is %d\n", base_ptr , args->vma_ios_fd);
+			pr_err("Unable to reserve memory (%lx), fd is %d\n", base_ptr, args->vma_ios_fd);
 			goto core_restore_end;
 		}
 	}
@@ -1912,14 +1912,14 @@ __visible long __export_restore_task(struct task_restore_args *args)
 			 * it to save memory. Limit the reads then to an arbitrary block size.
 			 */
 
-			if(args->image_type){
+			if (args->image_type) {
 				pr_info("Using CXL-backed storage, copying data from base ptr %p offset %llu\n",
 					(void *)base_ptr, (unsigned long long)rio->off);
 				memcpy(iovs->iov_base, (void *)base_ptr + rio->off, iovs->iov_len);
 				r = iovs->iov_len;
-			}
-			else r = preadv_limited(args->vma_ios_fd, iovs, nr, rio->off,
-					   args->auto_dedup ? AUTO_DEDUP_OVERHEAD_BYTES : 0);
+			} else
+				r = preadv_limited(args->vma_ios_fd, iovs, nr, rio->off,
+						   args->auto_dedup ? AUTO_DEDUP_OVERHEAD_BYTES : 0);
 			if (r < 0) {
 				pr_err("Can't read pages data (%d)\n", (int)r);
 				goto core_restore_end;
