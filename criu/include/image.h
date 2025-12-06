@@ -166,7 +166,6 @@ struct img_entry {
 	unsigned long total_size;
 	struct img_entry *next_entry;
 };
-
 extern void *base_ptr;
 extern void *data_head;
 extern struct im_img_desc *current_im_desc;
@@ -206,6 +205,7 @@ struct im_img *open_image_im(int type, unsigned long flags, va_list args);
 extern int open_image_lazy(struct cr_img *img);
 extern void *open_pages_image(unsigned long flags, void *pmi, u32 *pages_id);
 extern void *open_pages_image_at(int dfd, unsigned long flags, void *pmi, u32 *pages_id);
+extern unsigned long get_pages_image_base(struct im_img* img);
 extern void up_page_ids_base(void);
 
 extern struct cr_img *img_from_fd(int fd); /* for cr-show mostly */

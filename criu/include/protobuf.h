@@ -1,12 +1,14 @@
 #ifndef __CR_PROTOBUF_H__
 #define __CR_PROTOBUF_H__
 
+#include "image.h"
 #include <stdbool.h>
 
 #include "protobuf-desc.h"
 #include "common/compiler.h"
 #include "util.h"
 #include "imgset.h"
+#include <sys/time.h>
 
 struct cr_img;
 
@@ -17,8 +19,8 @@ extern int do_pb_read_one_generic(void *img, void **pobj, int type, bool eof);
 
 extern int pb_write_one_generic(void *img, void *obj, int type);
 
-extern int check_read_index(struct im_img *img, u32 size);
-extern void im_write_header(int type, unsigned long id);
+extern int check_read_index(struct im_img *img, u32 size, int type);
+extern void im_write_header(struct im_img *img);
 
 #define pb_write_one(img, obj, type) pb_write_one_generic(img, obj, type)
 
@@ -41,6 +43,11 @@ struct collect_image_info {
 #define COLLECT_SHARED	 0x1 /* use shared memory for obj-s */
 #define COLLECT_NOFREE	 0x2 /* don't free entry after callback */
 #define COLLECT_HAPPENED 0x4 /* image was opened and collected */
+
+#define PAGEMAP_SEG_SIZE 4ULL * 1024 * 1024
+
+extern struct im_img_desc *pm_desc;
+extern void *pm_head;
 
 extern int collect_image(struct collect_image_info *);
 extern int collect_entry(ProtobufCMessage *base, struct collect_image_info *cinfo);

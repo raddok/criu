@@ -80,7 +80,7 @@ struct page_read {
 	int nr_pmes;
 	int curr_pme;
 
-	unsigned long *pi_off_im;
+	unsigned long pi_base;
 
 	struct list_head async;
 };

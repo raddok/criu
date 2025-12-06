@@ -1,3 +1,4 @@
+#include "image-desc.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -529,7 +530,7 @@ void init_im_pointer(void)
 {
 	if (base_ptr == NULL) {
 		int _daxfd = open("/dev/dax0.0", O_RDWR);
-		unsigned long cxl_size = 1ULL * 1024 * 1024 * 1024; //8GB
+		unsigned long cxl_size = 8ULL * 1024 * 1024 * 1024; //8GB
 		void *cxl_ptr = mmap(NULL, cxl_size, PROT_READ | PROT_WRITE, MAP_SHARED, _daxfd, 0);
 		pr_info("CXL mapped at %p\n", cxl_ptr);
 		cxl_length = cxl_size;
@@ -560,12 +561,14 @@ void init_imgset_hash(void)
 	int i = 0;
 	void *scan_ptr = data_head;
 	struct im_img_desc *imh;
+	struct timeval t1, t2;
 	pr_info("read img nr is %d\n", im_img_checkpoint->img_nr);
+	gettimeofday(&t1, NULL);
 	for (i = 0; i < nr; i++) {
 		imh = (struct im_img_desc *)scan_ptr;
-		pr_info("img type %d id %lu size %lu next_desc %lu\n", imh->type, imh->id, imh->size, imh->next_desc);
+		//pr_info("img type %d id %lu size %lu next_desc %lu\n", imh->type, imh->id, imh->size, imh->next_desc);
 		if (im_imgset_hash[imh->type] == NULL) {
-			pr_info("first entry for type %d\n", imh->type);
+			//pr_info("first entry for type %d\n", imh->type);
 			im_imgset_hash[imh->type] = _alloc_new_entry(scan_ptr, imh);
 		} else {
 			struct img_entry *cur_entry = im_imgset_hash[imh->type];
@@ -583,12 +586,17 @@ void init_imgset_hash(void)
 				cur_entry = cur_entry->next_entry;
 			}
 			if (!flag) {
-				pr_info("add new entry for type %d\n", imh->type);
+				//pr_info("add new entry for type %d\n", imh->type);
 				cur_entry->next_entry = _alloc_new_entry(scan_ptr, imh);
 			}
 		}
-		scan_ptr += sizeof(struct im_img_desc) + imh->size;
+		if(imh->type == CR_FD_PAGEMAP){
+			scan_ptr += PAGEMAP_SEG_SIZE + sizeof(struct im_img_desc);
+		}
+		else scan_ptr += sizeof(struct im_img_desc) + imh->size;
 	}
+	gettimeofday(&t2, NULL);
+	pr_info("scan time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 }
 
 struct im_imgset *im_imgset_open_range(int pid, int from, int to, unsigned long flags)
@@ -1088,6 +1096,28 @@ void *open_pages_image_at(int dfd, unsigned long flags, void *pmi, u32 *id)
 void *open_pages_image(unsigned long flags, void *pmi, u32 *id)
 {
 	return open_pages_image_at(get_service_fd(IMG_FD_OFF), flags, pmi, id);
+}
+
+unsigned long get_pages_image_base(struct im_img* img)
+{
+	struct img_entry *ime;
+	ime = im_imgset_hash[img->type];
+	while(ime != NULL){
+		if(ime->id == img->id){
+			int padding = 0;
+			unsigned long offset = ime->offset + sizeof(struct im_img_header);
+			if(offset % 4096 !=0){
+				padding = 4096 - offset % 4096;
+				ime->size -= padding;
+				ime->offset += padding;
+			}
+			pr_info("get page image base %lu\n", ime->offset);
+			return ime->offset + sizeof(struct im_img_header);
+		}
+		ime = ime->next_entry;
+	}
+	pr_err("no page entry found\n");
+	return 0;
 }
 
 /*

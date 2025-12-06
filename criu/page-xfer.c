@@ -256,16 +256,22 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 {
 	ssize_t ret;
 	ssize_t curr = 0;
+	struct timeval t1, t2;
 
 	if (opts.image_type == IMAGE_TYPE_IM) {
 		struct im_img *img;
+		madvise(data_head, len, MADV_POPULATE_WRITE);
+		
+		gettimeofday(&t1, NULL);
 		img = (struct im_img *)(xfer->pi);
-		im_write_header(img->type, img->id);
-		while(1){
+		im_write_header(img);
+		pr_info("page length is %lu, write at offset %lu\n", len, data_head - base_ptr);
+		while (1) {
 			ret = read(p, data_head, len);
 			if (ret <= 0) {
 				pr_err("read failed in write_pages_loc\n");
 			}
+			//pr_info("read bytes %lu\n", ret);
 			curr += ret;
 			data_head += ret;
 			if (curr == len)
@@ -275,14 +281,17 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 		im_img_checkpoint->total_size += len;
 		if ((data_head - base_ptr) % 8 != 0) {
 			int padding = 8 - ((data_head - base_ptr) % 8);
-			pr_info("Need padding size %d\n", padding);
+			//pr_info("Need padding size %d\n", padding);
 			data_head += padding;
 			current_im_desc->size += padding;
 			im_img_checkpoint->total_size += padding;
 		}
-		pr_info("Total_size now is %ld\n", im_img_checkpoint->total_size);
+		gettimeofday(&t2, NULL);
+		pr_info("page copy time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
+		//pr_info("Total_size now is %ld\n", im_img_checkpoint->total_size);
 		return 0;
 	}
+	gettimeofday(&t1, NULL);
 	while (1) {
 		ret = splice(p, NULL, img_raw_fd(xfer->pi), NULL, len - curr, SPLICE_F_MOVE);
 		if (ret == -1) {
@@ -297,7 +306,8 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 		if (curr == len)
 			break;
 	}
-
+	gettimeofday(&t2, NULL);
+	pr_info("page copy time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 	return 0;
 }
 

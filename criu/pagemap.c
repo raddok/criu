@@ -131,9 +131,6 @@ static int advance(struct page_read *pr)
 	pr->pe = pr->pmes[pr->curr_pme];
 	pr->cvaddr = pr->pe->vaddr;
 
-	if (opts.image_type == IMAGE_TYPE_IM) {
-		pr->pi_off = pr->pi_off_im[pr->curr_pme];
-	}
 
 	return 1;
 }
@@ -628,7 +625,7 @@ static void reset_pagemap(struct page_read *pr)
 	pr->pi_off = 0;
 	pr->curr_pme = -1;
 	pr->pe = NULL;
-
+	if(opts.image_type == IMAGE_TYPE_IM) pr->pi_off += pr->pi_base;
 	/* FIXME: take care of bunch */
 
 	if (pr->parent)
@@ -704,7 +701,6 @@ static int init_pagemaps(struct page_read *pr)
 {
 	off_t fsize;
 	int nr_pmes, nr_realloc;
-	struct im_img_desc *imh;
 
 	if (opts.stream) {
 		/*
@@ -726,7 +722,6 @@ static int init_pagemaps(struct page_read *pr)
 	nr_realloc = nr_pmes / 2;
 
 	pr->pmes = xzalloc(nr_pmes * sizeof(*pr->pmes));
-	pr->pi_off_im = xzalloc(nr_pmes * sizeof(unsigned long));
 	if (!pr->pmes)
 		return -1;
 
@@ -735,17 +730,6 @@ static int init_pagemaps(struct page_read *pr)
 
 	while (1) {
 		int ret;
-		if (opts.image_type == IMAGE_TYPE_IM) {
-			struct im_img *img = (struct im_img *)pr->pmi;
-			if(pr->nr_pmes == 0){
-				pr->pi_off_im[pr->nr_pmes] = img->offset + img->size + sizeof(struct im_img_desc) + sizeof(struct im_img_header);
-			}
-			else{
-				imh = base_ptr + img->offset - sizeof(struct im_img_desc);
-				pr->pi_off_im[pr->nr_pmes] = img->offset + imh->size + sizeof(struct im_img_desc)  + sizeof(struct im_img_header);
-			}
-			pr_info("pagemap entry %d get offset %lu\n", pr->nr_pmes, pr->pi_off_im[pr->nr_pmes]);
-		}
 		ret = pb_read_one_eof(pr->pmi, &pr->pmes[pr->nr_pmes], PB_PAGEMAP);
 		if (ret < 0)
 			goto free_pagemaps;
@@ -759,7 +743,6 @@ static int init_pagemaps(struct page_read *pr)
 			PagemapEntry **new;
 			nr_pmes += nr_realloc;
 			new = xrealloc(pr->pmes, nr_pmes * sizeof(*pr->pmes));
-			pr->pi_off_im = xrealloc(pr->pi_off_im, nr_pmes * sizeof(unsigned long));
 			if (!new)
 				goto free_pagemaps;
 			pr->pmes = new;
@@ -832,6 +815,10 @@ int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int p
 	}
 
 	pr->pi = open_pages_image_at(dfd, flags, pr->pmi, &pr->pages_img_id);
+	if(opts.image_type == IMAGE_TYPE_IM){
+		pr->pi_base = get_pages_image_base((struct im_img *)(pr->pi));
+		pr->pi_off += pr->pi_base;
+	}
 	if (!pr->pi) {
 		close_page_read(pr);
 		return -1;

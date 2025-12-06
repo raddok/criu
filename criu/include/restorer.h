@@ -242,6 +242,7 @@ struct task_restore_args {
 	bool has_clone3_set_tid;
 	bool image_type;
 	unsigned long cxl_size;
+	unsigned long image_size;
 
 	/*
 	 * info about rseq from libc used to

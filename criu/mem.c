@@ -1,4 +1,3 @@
-#include "image.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -36,6 +35,8 @@
 
 #include "protobuf.h"
 #include "images/pagemap.pb-c.h"
+#include "image.h"
+#include "imgset.h"
 
 static int task_reset_dirty_track(int pid)
 {
@@ -1512,6 +1513,7 @@ static int prepare_vma_ios(struct pstree_item *t, struct task_restore_args *ta)
 	ta->vma_ios_fd = opts.image_type ? daxfd : img_raw_fd(pages);
 	ta->cxl_size = cxl_length;
 	ta->image_type = opts.image_type;
+	ta->image_size = img_raw_size(pages);
 	return pagemap_render_iovec(&rsti(t)->vma_io, ta);
 }
 
