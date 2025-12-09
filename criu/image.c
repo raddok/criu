@@ -529,7 +529,7 @@ err:
 void init_im_pointer(void)
 {
 	if (base_ptr == NULL) {
-		int _daxfd = open("/dev/dax0.0", O_RDWR);
+		int _daxfd = open("/mnt/tmp/chunk_device", O_RDWR);
 		unsigned long cxl_size = 8ULL * 1024 * 1024 * 1024; //8GB
 		void *cxl_ptr = mmap(NULL, cxl_size, PROT_READ | PROT_WRITE, MAP_SHARED, _daxfd, 0);
 		pr_info("CXL mapped at %p\n", cxl_ptr);
@@ -590,10 +590,10 @@ void init_imgset_hash(void)
 				cur_entry->next_entry = _alloc_new_entry(scan_ptr, imh);
 			}
 		}
-		if(imh->type == CR_FD_PAGEMAP){
+		if (imh->type == CR_FD_PAGEMAP) {
 			scan_ptr += PAGEMAP_SEG_SIZE + sizeof(struct im_img_desc);
-		}
-		else scan_ptr += sizeof(struct im_img_desc) + imh->size;
+		} else
+			scan_ptr += sizeof(struct im_img_desc) + imh->size;
 	}
 	gettimeofday(&t2, NULL);
 	pr_info("scan time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
@@ -1098,15 +1098,15 @@ void *open_pages_image(unsigned long flags, void *pmi, u32 *id)
 	return open_pages_image_at(get_service_fd(IMG_FD_OFF), flags, pmi, id);
 }
 
-unsigned long get_pages_image_base(struct im_img* img)
+unsigned long get_pages_image_base(struct im_img *img)
 {
 	struct img_entry *ime;
 	ime = im_imgset_hash[img->type];
-	while(ime != NULL){
-		if(ime->id == img->id){
+	while (ime != NULL) {
+		if (ime->id == img->id) {
 			int padding = 0;
 			unsigned long offset = ime->offset + sizeof(struct im_img_header);
-			if(offset % 4096 !=0){
+			if (offset % 4096 != 0) {
 				padding = 4096 - offset % 4096;
 				ime->size -= padding;
 				ime->offset += padding;

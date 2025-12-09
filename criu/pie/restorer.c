@@ -1,3 +1,4 @@
+#include "compel/plugins/include/uapi/std/syscall-64.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -1727,8 +1728,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	pid_t my_pid = sys_getpid();
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
-	unsigned long base_ptr = 0;
-	unsigned long cxl_size;
+	//unsigned long cxl_size;
 	struct timeval t1, t2;
 
 	bootstrap_start = args->bootstrap_start;
@@ -1743,7 +1743,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	n_helpers = args->helpers_n;
 	zombies = args->zombies;
 	n_zombies = args->zombies_n;
-	cxl_size = args->cxl_size;
+	//cxl_size = args->cxl_size;
 	*args->breakpoint = rst_sigreturn;
 #ifdef ARCH_HAS_LONG_PAGES
 	__page_size = args->page_size;
@@ -1893,14 +1893,13 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	 */
 	rio = args->vma_ios;
 	if (args->image_type) {
-		args->vma_ios_fd = sys_open("/dev/dax0.0", O_RDONLY, 0);
-		base_ptr = sys_mmap(NULL, cxl_size, PROT_READ, MAP_SHARED, args->vma_ios_fd, 0);
-		if (IS_ERR((void *)base_ptr)) {
-			pr_err("Unable to reserve memory (%lx), fd is %d\n", base_ptr, args->vma_ios_fd);
-			goto core_restore_end;
-		}
+		args->vma_ios_fd = sys_open("/mnt/tmp/chunk_device", O_RDONLY, 0);
+		//base_ptr = sys_mmap(NULL, cxl_size, PROT_READ, MAP_SHARED, args->vma_ios_fd, 0);
+		// if (IS_ERR((void *)base_ptr)) {
+		// 	pr_err("Unable to reserve memory (%lx), fd is %d\n", base_ptr, args->vma_ios_fd);
+		// 	goto core_restore_end;
+		// }
 		//sys_madvise(base_ptr + rio->off, args->image_size, MADV_POPULATE_READ);
-		
 	}
 
 	pr_info("Total batches (vma_ios_n): %d\n", args->vma_ios_n);
@@ -1912,7 +1911,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 		ssize_t r;
 
 		while (nr) {
-			//pr_debug("Preadv %lx:%d... (%d iovs)\n", (unsigned long)iovs->iov_base, (int)iovs->iov_len, nr);
+			pr_debug("Preadv %lx:%d... (%d iovs)\n", (unsigned long)iovs->iov_base, (int)iovs->iov_len, nr);
 			/*
 			 * If we're requested to punch holes in the file after reading we do
 			 * it to save memory. Limit the reads then to an arbitrary block size.
@@ -1921,7 +1920,8 @@ __visible long __export_restore_task(struct task_restore_args *args)
 			if (args->image_type) {
 				//pr_info("Using CXL-backed storage, copying data from base ptr %p offset %llu\n",
 				//	(void *)base_ptr, (unsigned long long)rio->off);
-				memcpy(iovs->iov_base, (void *)base_ptr + rio->off, iovs->iov_len);
+				// memcpy(iovs->iov_base, (void *)base_ptr + rio->off, iovs->iov_len);
+				sys_mmap(iovs->iov_base, iovs->iov_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED, args->vma_ios_fd, rio->off);
 				r = iovs->iov_len;
 			} else
 				r = preadv_limited(args->vma_ios_fd, iovs, nr, rio->off,
@@ -1931,7 +1931,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 				goto core_restore_end;
 			}
 
-			//pr_debug("`- returned %ld\n", (long)r);
+			pr_debug("`- returned %ld\n", (long)r);
 			/* If the file is open for writing, then it means we should punch holes
 			 * in it. */
 			if (r > 0 && args->auto_dedup) {
@@ -1945,7 +1945,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 			/* Advance the iovecs */
 			do {
 				if (iovs->iov_len <= r) {
-					//pr_debug("   `- skip pagemap\n");
+					pr_debug("   `- skip pagemap\n");
 					r -= iovs->iov_len;
 					iovs++;
 					nr--;
@@ -1960,6 +1960,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 
 		rio = ((void *)rio) + RIO_SIZE(rio->nr_iovs);
 	}
+	//sys_munmap((void *)base_ptr, args->cxl_size);
 	sys_gettimeofday(&t2, NULL);
 	pr_info("page read time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 
