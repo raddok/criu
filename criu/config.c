@@ -433,6 +433,7 @@ void init_opts(void)
 	opts.network_lock_method = NETWORK_LOCK_DEFAULT;
 	opts.ghost_fiemap = FIEMAP_DEFAULT;
 	opts.image_type = IMAGE_TYPE_CR;
+	opts.use_cow = 0;
 }
 
 bool deprecated_ok(char *what)
@@ -707,6 +708,7 @@ int parse_options(int argc, char **argv, bool *usage_error, bool *has_exec_cmd, 
 		BOOL_OPT("ghost-fiemap", &opts.ghost_fiemap),
 		BOOL_OPT(OPT_ALLOW_UPROBES, &opts.allow_uprobes),
 		BOOL_OPT("in-memory", &opts.image_type),
+		BOOL_OPT("use-cow", &opts.use_cow),
 		{},
 	};
 

@@ -1122,6 +1122,7 @@ static int userns_move(void *arg, int fd, pid_t pid)
 	char pidbuf[32];
 	int cg, len, err;
 
+	return 0;
 	len = snprintf(pidbuf, sizeof(pidbuf), "%d", pid);
 
 	if (len >= sizeof(pidbuf)) {
@@ -1296,6 +1297,8 @@ int restore_task_cgroup(struct pstree_item *me)
 	struct pstree_item *parent = me->parent;
 	CgSetEntry *se;
 	u32 current_cgset;
+
+	return 0;
 
 	if (opts.manage_cgroups == CG_MODE_IGNORE)
 		return 0;
@@ -1577,7 +1580,7 @@ static int filter_ifpriomap(char *out, char *line)
 		strncpy(out, line, len + 1);
 		out += len + 1;
 		written = true;
-	next:
+next:
 		line = next_line + 1;
 	} while (*next_line != '\0');
 
@@ -1649,7 +1652,7 @@ static int prepare_cgroup_dir_properties(char *path, int off, CgroupDirEntry **e
 			if (restore_cgroup_prop(p, path, off2, false, false) < 0)
 				return -1;
 		}
-	skip:
+skip:
 		if (prepare_cgroup_dir_properties(path, off2, e->children, e->n_children) < 0)
 			return -1;
 	}
@@ -2242,7 +2245,7 @@ int prepare_cgroup(void)
 	int ret;
 	struct cr_img *img;
 	CgroupEntry *ce;
-
+	return 0;
 	img = open_image(CR_FD_CGROUP, O_RSTR);
 	if (!img)
 		return -1;

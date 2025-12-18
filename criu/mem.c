@@ -1514,6 +1514,7 @@ static int prepare_vma_ios(struct pstree_item *t, struct task_restore_args *ta)
 	ta->cxl_size = cxl_length;
 	ta->image_type = opts.image_type;
 	ta->image_size = img_raw_size(pages);
+	ta->use_cow = opts.use_cow;
 	return pagemap_render_iovec(&rsti(t)->vma_io, ta);
 }
 

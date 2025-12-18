@@ -556,7 +556,7 @@ static int restore_seccomp(struct thread_restore_args *args)
 {
 	pid_t tid = sys_gettid();
 	int ret;
-
+	return 0;
 	switch (args->seccomp_mode) {
 	case SECCOMP_MODE_DISABLED:
 		pr_debug("seccomp: mode %d on tid %d\n", SECCOMP_MODE_DISABLED, tid);
@@ -666,7 +666,7 @@ static int send_cg_set(int sk, int cg_set)
 	char cmsg[CMSG_SPACE(sizeof(struct ucred))] = {};
 	int ret, *dummy = NULL;
 	struct ucred *ucred;
-
+	return 0;
 	iov[0].iov_base = &dummy;
 	iov[0].iov_len = sizeof(dummy);
 	iov[1].iov_base = &cg_set;
@@ -715,7 +715,7 @@ static int recv_cg_set_restore_ack(int sk)
 	char cmsg[CMSG_SPACE(sizeof(struct ucred))];
 	struct ucred *cred;
 	int ret;
-
+	return 0;
 	h.msg_control = cmsg;
 	h.msg_controllen = sizeof(cmsg);
 
@@ -773,7 +773,7 @@ __visible long __export_restore_thread(struct thread_restore_args *args)
 	if (args->cg_set != -1) {
 		int err = 0;
 
-		mutex_lock(&task_entries_local->cgroupd_sync_lock);
+		//mutex_lock(&task_entries_local->cgroupd_sync_lock);
 
 		pr_info("Restore cg_set in thread cg_set: %d\n", args->cg_set);
 
@@ -781,8 +781,8 @@ __visible long __export_restore_thread(struct thread_restore_args *args)
 		if (!err)
 			err = recv_cg_set_restore_ack(args->cgroupd_sk);
 
-		mutex_unlock(&task_entries_local->cgroupd_sync_lock);
-		sys_close(args->cgroupd_sk);
+		//mutex_unlock(&task_entries_local->cgroupd_sync_lock);
+		//sys_close(args->cgroupd_sk);
 
 		if (err)
 			goto core_restore_end;
@@ -1728,8 +1728,9 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	pid_t my_pid = sys_getpid();
 	rt_sigaction_t act;
 	bool has_vdso_proxy;
-	//unsigned long cxl_size;
+	unsigned long cxl_size = args->cxl_size;
 	struct timeval t1, t2;
+	unsigned long base_ptr = 0;
 
 	bootstrap_start = args->bootstrap_start;
 	bootstrap_len = args->bootstrap_len;
@@ -1806,12 +1807,14 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	 * for instance once the kernel will want to update (struct rseq).cpu_id field:
 	 * https://github.com/torvalds/linux/blob/ce522ba9ef7e/kernel/rseq.c#L89
 	 */
+
 	unregister_libc_rseq(&args->libc_rseq);
 
+	pr_info("start\n");
 	if (unmap_old_vmas((void *)args->premmapped_addr, args->premmapped_len, bootstrap_start, bootstrap_len,
 			   args->task_size))
 		goto core_restore_end;
-
+	pr_info("end\n");
 	/* Map vdso that wasn't parked */
 	if (args->can_map_vdso && (map_vdso(args, args->compatible_mode) < 0))
 		goto core_restore_end;
@@ -1893,8 +1896,9 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	 */
 	rio = args->vma_ios;
 	if (args->image_type) {
-		args->vma_ios_fd = sys_open("/mnt/tmp/chunk_device", O_RDONLY, 0);
-		//base_ptr = sys_mmap(NULL, cxl_size, PROT_READ, MAP_SHARED, args->vma_ios_fd, 0);
+		args->vma_ios_fd = sys_open("/mnt/tmp/chunk_size", O_RDONLY, 0);
+		if (!args->use_cow)
+			base_ptr = sys_mmap(NULL, cxl_size, PROT_READ, MAP_SHARED, args->vma_ios_fd, 0);
 		// if (IS_ERR((void *)base_ptr)) {
 		// 	pr_err("Unable to reserve memory (%lx), fd is %d\n", base_ptr, args->vma_ios_fd);
 		// 	goto core_restore_end;
@@ -1909,6 +1913,7 @@ __visible long __export_restore_task(struct task_restore_args *args)
 		struct iovec *iovs = rio->iovs;
 		int nr = rio->nr_iovs;
 		ssize_t r;
+		long ret;
 
 		while (nr) {
 			pr_debug("Preadv %lx:%d... (%d iovs)\n", (unsigned long)iovs->iov_base, (int)iovs->iov_len, nr);
@@ -1921,7 +1926,12 @@ __visible long __export_restore_task(struct task_restore_args *args)
 				//pr_info("Using CXL-backed storage, copying data from base ptr %p offset %llu\n",
 				//	(void *)base_ptr, (unsigned long long)rio->off);
 				// memcpy(iovs->iov_base, (void *)base_ptr + rio->off, iovs->iov_len);
-				sys_mmap(iovs->iov_base, iovs->iov_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED, args->vma_ios_fd, rio->off);
+				if (args->use_cow) {
+					pr_info("using cow mmap\n");
+					ret = sys_mmap(iovs->iov_base, iovs->iov_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED, args->vma_ios_fd, rio->off);
+					pr_info("ret is %ld\n", ret);
+				} else
+					memcpy(iovs->iov_base, (void *)base_ptr + rio->off, iovs->iov_len);
 				r = iovs->iov_len;
 			} else
 				r = preadv_limited(args->vma_ios_fd, iovs, nr, rio->off,
@@ -1970,9 +1980,11 @@ __visible long __export_restore_task(struct task_restore_args *args)
 	/*
 	 * Proxify vDSO.
 	 */
+	pr_info("start\n");
 	if (vdso_proxify(&args->vdso_maps_rt, &has_vdso_proxy, args->vmas, args->vmas_n, args->compatible_mode,
 			 fault_injected(FI_VDSO_TRAMPOLINES)))
 		goto core_restore_end;
+	pr_info("end\n");
 
 	/* unmap rt-vdso with restorer blob after restore's finished */
 	if (!has_vdso_proxy)

@@ -250,6 +250,7 @@ struct cr_options {
 	 */
 	int unprivileged;
 	int image_type;
+	int use_cow;
 };
 
 extern struct cr_options opts;

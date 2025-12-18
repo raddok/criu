@@ -243,6 +243,7 @@ struct task_restore_args {
 	bool image_type;
 	unsigned long cxl_size;
 	unsigned long image_size;
+	bool use_cow;
 
 	/*
 	 * info about rseq from libc used to

@@ -61,7 +61,7 @@ int do_pb_read_one(struct cr_img *img, void **pobj, int type, bool eof)
 	void *buf = (void *)&local;
 	u32 size;
 	int ret;
-	struct timeval t1, t2;
+	//struct timeval t1, t2;
 
 	if (!cr_pb_descs[type].pb_desc) {
 		pr_err("Wrong object requested %d on %s\n", type, image_name(img, img_name_buf));
@@ -69,7 +69,7 @@ int do_pb_read_one(struct cr_img *img, void **pobj, int type, bool eof)
 	}
 
 	*pobj = NULL;
-	gettimeofday(&t1, NULL);
+	//gettimeofday(&t1, NULL);
 	if (unlikely(empty_image(img)))
 		ret = 0;
 	else
@@ -103,8 +103,8 @@ int do_pb_read_one(struct cr_img *img, void **pobj, int type, bool eof)
 		ret = -1;
 		goto err;
 	}
-	gettimeofday(&t2, NULL);
-	pr_info("read time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
+	//gettimeofday(&t2, NULL);
+	//pr_info("read time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 	*pobj = cr_pb_descs[type].unpack(NULL, size, buf);
 	if (!*pobj) {
 		ret = -1;
@@ -167,7 +167,7 @@ int do_pb_read_one_im(struct im_img *img, void **pobj, int type)
 	void *buf = (void *)&local;
 	u32 size;
 	int ret;
-	struct timeval t1, t2;
+	//struct timeval t1, t2;
 	if (!cr_pb_descs[type].pb_desc) {
 		pr_err("Wrong object requested %d\n", type);
 		return -1;
@@ -176,9 +176,9 @@ int do_pb_read_one_im(struct im_img *img, void **pobj, int type)
 		pr_info("Image size is 0\n");
 		return 0;
 	}
-	gettimeofday(&t1, NULL);
+	//gettimeofday(&t1, NULL);
 	memcpy(&size, base_ptr + img->offset, sizeof(size));
-	pr_info("read size is %u, offset is %lu\n", size, img->offset);
+	//pr_info("read size is %u, offset is %lu\n", size, img->offset);
 	if (size > PB_PKOBJ_LOCAL_SIZE) {
 		buf = xmalloc(size);
 		if (!buf) {
@@ -187,24 +187,24 @@ int do_pb_read_one_im(struct im_img *img, void **pobj, int type)
 		}
 	}
 	memcpy(buf, base_ptr + img->offset + sizeof(size), size);
-	gettimeofday(&t2, NULL);
-	pr_info("memory read time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
-	gettimeofday(&t2, NULL);
+	//gettimeofday(&t2, NULL);
+	//pr_info("memory read time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
+	//gettimeofday(&t2, NULL);
 	if (check_read_index(img, size, type)) {
 		ret = -1;
 		goto err;
 	}
-	gettimeofday(&t1, NULL);
-	pr_info("check header time is %ld\n", (t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec);
-	gettimeofday(&t1, NULL);
+	//gettimeofday(&t1, NULL);
+	//pr_info("check header time is %ld\n", (t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec);
+	//gettimeofday(&t1, NULL);
 	*pobj = cr_pb_descs[type].unpack(NULL, size, buf);
 	if (!*pobj) {
 		ret = -1;
 		pr_err("Failed unpacking object %p\n", pobj);
 		goto err;
 	}
-	gettimeofday(&t2, NULL);
-	pr_info("unpack time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
+	//gettimeofday(&t2, NULL);
+	//pr_info("unpack time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 	ret = 1;
 err:
 	if (buf != (void *)&local)
@@ -216,10 +216,10 @@ err:
 int do_pb_read_one_generic(void *img, void **pobj, int type, bool eof)
 {
 	if (opts.image_type == IMAGE_TYPE_CR) {
-		pr_info("Reading PB object type %d from CR image %p\n", type, img);
+		//pr_info("Reading PB object type %d from CR image %p\n", type, img);
 		return do_pb_read_one((struct cr_img *)img, pobj, type, eof);
 	} else if (opts.image_type == IMAGE_TYPE_IM) {
-		pr_info("Reading PB object type %d from IM image %p\n", type, img);
+		//pr_info("Reading PB object type %d from IM image %p\n", type, img);
 		return do_pb_read_one_im((struct im_img *)img, pobj, type);
 	} else {
 		pr_err("Unknown image type %d\n", opts.image_type);

@@ -529,7 +529,7 @@ err:
 void init_im_pointer(void)
 {
 	if (base_ptr == NULL) {
-		int _daxfd = open("/mnt/tmp/chunk_device", O_RDWR);
+		int _daxfd = open("/mnt/tmp/chunk_size", O_RDWR);
 		unsigned long cxl_size = 8ULL * 1024 * 1024 * 1024; //8GB
 		void *cxl_ptr = mmap(NULL, cxl_size, PROT_READ | PROT_WRITE, MAP_SHARED, _daxfd, 0);
 		pr_info("CXL mapped at %p\n", cxl_ptr);

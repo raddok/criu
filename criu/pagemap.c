@@ -764,6 +764,7 @@ int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int p
 	int flags, i_typ;
 	static unsigned ids = 1;
 	bool remote = pr_flags & PR_REMOTE;
+	struct timeval t1, t2;
 
 	/*
 	 * Only the top-most page-read can be remote, all the
@@ -824,11 +825,13 @@ int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int p
 		return -1;
 	}
 
+	gettimeofday(&t1, NULL);
 	if (init_pagemaps(pr)) {
 		close_page_read(pr);
 		return -1;
 	}
-
+	gettimeofday(&t2, NULL);
+	pr_info("Pagemap init time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 	pr->read_pages = read_pagemap_page;
 	pr->advance = advance;
 	pr->close = close_page_read;

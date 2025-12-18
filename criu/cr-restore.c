@@ -389,7 +389,6 @@ static int populate_root_fd_off(void)
 {
 	struct ns_id *mntns = NULL;
 	int ret;
-
 	if (root_ns_mask & CLONE_NEWNS) {
 		mntns = lookup_ns_by_id(root_item->ids->mnt_ns_id, &mnt_ns_desc);
 		BUG_ON(!mntns);
@@ -475,7 +474,7 @@ static int collect_inotify_fds(struct task_restore_args *ta)
 	struct list_head *list = &rsti(current)->fds;
 	struct fdt *fdt = rsti(current)->fdt;
 	struct fdinfo_list_entry *fle;
-
+	return 0;
 	/* Check we are an fdt-restorer */
 	if (fdt && fdt->pid != vpid(current))
 		return 0;
@@ -647,17 +646,17 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 	if (prepare_fds(current))
 		return -1;
 
-	if (prepare_file_locks(pid))
-		return -1;
+	// if (prepare_file_locks(pid))
+	// 	return -1;
 
 	if (open_vmas(current))
 		return -1;
 
-	if (prepare_aios(current, ta))
-		return -1;
+	// if (prepare_aios(current, ta))
+	// 	return -1;
 
-	if (fixup_sysv_shmems())
-		return -1;
+	// if (fixup_sysv_shmems())
+	// 	return -1;
 
 	if (open_cores(pid, core))
 		return -1;
@@ -665,8 +664,8 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 	if (prepare_signals(pid, ta, core))
 		return -1;
 
-	if (prepare_posix_timers(pid, ta, core))
-		return -1;
+	// if (prepare_posix_timers(pid, ta, core))
+	// 	return -1;
 
 	if (prepare_rlimits(pid, ta, core) < 0)
 		return -1;
@@ -687,8 +686,8 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 	 * Get all the tcp sockets fds into rst memory -- restorer
 	 * will turn repair off before going sigreturn
 	 */
-	if (prepare_tcp_socks(ta))
-		return -1;
+	// if (prepare_tcp_socks(ta))
+	// 	return -1;
 
 	/*
 	 * Copy timerfd params for restorer args, we need to proceed
@@ -697,11 +696,11 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 	if (prepare_timerfds(ta))
 		return -1;
 
-	if (seccomp_prepare_threads(current, ta) < 0)
-		return -1;
+	// if (seccomp_prepare_threads(current, ta) < 0)
+	// 	return -1;
 
-	if (prepare_itimers(pid, ta, core) < 0)
-		return -1;
+	// if (prepare_itimers(pid, ta, core) < 0)
+	// 	return -1;
 
 	if (prepare_mm(pid, ta))
 		return -1;
@@ -716,8 +715,8 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 	if (restore_task_net_ns(current))
 		return -1;
 
-	if (setup_uffd(pid, ta))
-		return -1;
+	// if (setup_uffd(pid, ta))
+	// 	return -1;
 
 	if (arch_shstk_prepare(current, core, ta))
 		return -1;
@@ -853,7 +852,7 @@ static int setup_newborn_fds(struct pstree_item *me)
 static int check_core(CoreEntry *core, struct pstree_item *me)
 {
 	int ret = -1;
-
+	return 0;
 	if (core->mtype != CORE_ENTRY__MARCH) {
 		pr_err("Core march mismatch %d\n", (int)core->mtype);
 		goto out;
@@ -1086,7 +1085,7 @@ static int set_next_pid(void *arg)
 static inline int fork_with_pid(struct pstree_item *item)
 {
 	struct cr_clone_arg ca;
-	struct ns_id *pid_ns = NULL;
+	// struct ns_id *pid_ns = NULL;
 	bool external_pidns = false;
 	int ret = -1;
 	pid_t pid = vpid(item);
@@ -1104,14 +1103,14 @@ static inline int fork_with_pid(struct pstree_item *item)
 		 * Zombie tasks' cgroup is not dumped/restored.
 		 * cg_set == 0 is skipped in prepare_task_cgroup()
 		 */
-		if (item->pid->state == TASK_DEAD) {
-			rsti(item)->cg_set = 0;
-		} else {
-			if (ca.core->thread_core->has_cg_set)
-				rsti(item)->cg_set = ca.core->thread_core->cg_set;
-			else
-				rsti(item)->cg_set = ca.core->tc->cg_set;
-		}
+		// if (item->pid->state == TASK_DEAD) {
+		// 	rsti(item)->cg_set = 0;
+		// } else {
+		// 	if (ca.core->thread_core->has_cg_set)
+		// 		rsti(item)->cg_set = ca.core->thread_core->cg_set;
+		// 	else
+		// 		rsti(item)->cg_set = ca.core->tc->cg_set;
+		// }
 
 		if (ca.core->tc->has_stop_signo)
 			item->pid->stop_signo = ca.core->tc->stop_signo;
@@ -1141,36 +1140,36 @@ static inline int fork_with_pid(struct pstree_item *item)
 		ca.core = NULL;
 	}
 
-	if (item->ids)
-		pid_ns = lookup_ns_by_id(item->ids->pid_ns_id, &pid_ns_desc);
+	// if (item->ids)
+	// 	pid_ns = lookup_ns_by_id(item->ids->pid_ns_id, &pid_ns_desc);
 
-	if (!current && pid_ns && pid_ns->ext_key)
-		external_pidns = true;
+	// if (!current && pid_ns && pid_ns->ext_key)
+	// 	external_pidns = true;
 
-	if (external_pidns) {
-		int fd;
+	// if (external_pidns) {
+	// 	int fd;
 
-		/* Not possible to restore into an empty PID namespace. */
-		if (pid == INIT_PID) {
-			pr_err("Unable to restore into an empty PID namespace\n");
-			return -1;
-		}
+	// 	/* Not possible to restore into an empty PID namespace. */
+	// 	if (pid == INIT_PID) {
+	// 		pr_err("Unable to restore into an empty PID namespace\n");
+	// 		return -1;
+	// 	}
 
-		fd = inherit_fd_lookup_id(pid_ns->ext_key);
-		if (fd < 0) {
-			pr_err("Unable to find an external pidns: %s\n", pid_ns->ext_key);
-			return -1;
-		}
+	// 	fd = inherit_fd_lookup_id(pid_ns->ext_key);
+	// 	if (fd < 0) {
+	// 		pr_err("Unable to find an external pidns: %s\n", pid_ns->ext_key);
+	// 		return -1;
+	// 	}
 
-		ret = switch_ns_by_fd(fd, &pid_ns_desc, NULL);
-		close(fd);
-		if (ret) {
-			pr_err("Unable to enter existing PID namespace\n");
-			return -1;
-		}
+	// 	ret = switch_ns_by_fd(fd, &pid_ns_desc, NULL);
+	// 	close(fd);
+	// 	if (ret) {
+	// 		pr_err("Unable to enter existing PID namespace\n");
+	// 		return -1;
+	// 	}
 
-		pr_info("Inheriting external pidns %s for %d\n", pid_ns->ext_key, pid);
-	}
+	// 	pr_info("Inheriting external pidns %s for %d\n", pid_ns->ext_key, pid);
+	// }
 
 	ca.item = item;
 	ca.clone_flags = rsti(item)->clone_flags;
@@ -1553,25 +1552,25 @@ static int __restore_task_with_children(void *_arg)
 		 * The root task has to be in its namespaces before executing
 		 * ACT_SETUP_NS scripts, so the root netns has to be created here
 		 */
-		if (root_ns_mask & CLONE_NEWNET) {
-			struct ns_id *ns = net_get_root_ns();
-			if (ns->ext_key)
-				ret = net_set_ext(ns);
-			else
-				ret = unshare(CLONE_NEWNET);
-			if (ret) {
-				pr_perror("Can't unshare net-namespace");
-				goto err;
-			}
-		}
+		// if (root_ns_mask & CLONE_NEWNET) {
+		// 	struct ns_id *ns = net_get_root_ns();
+		// 	if (ns->ext_key)
+		// 		ret = net_set_ext(ns);
+		// 	else
+		// 		ret = unshare(CLONE_NEWNET);
+		// 	if (ret) {
+		// 		pr_perror("Can't unshare net-namespace");
+		// 		goto err;
+		// 	}
+		// }
 
-		if (root_ns_mask & CLONE_NEWTIME) {
-			if (prepare_timens(current->ids->time_ns_id))
-				goto err;
-		} else if (kdat.has_timens) {
-			if (prepare_timens(0))
-				goto err;
-		}
+		// if (root_ns_mask & CLONE_NEWTIME) {
+		// 	if (prepare_timens(current->ids->time_ns_id))
+		// 		goto err;
+		// } else if (kdat.has_timens) {
+		// 	if (prepare_timens(0))
+		// 		goto err;
+		// }
 
 		if (set_opts_cap_eff())
 			goto err;
@@ -1584,8 +1583,8 @@ static int __restore_task_with_children(void *_arg)
 		 * Since we don't support nesting of cgroup namespaces, let's
 		 * only set up the cgns (if it exists) in the init task.
 		 */
-		if (prepare_cgroup_namespace(current) < 0)
-			goto err;
+		// if (prepare_cgroup_namespace(current) < 0)
+		// 	goto err;
 	}
 
 	if (needs_prep_creds(current) && (prepare_userns_creds()))
@@ -1602,10 +1601,10 @@ static int __restore_task_with_children(void *_arg)
 
 	/* Restore root task */
 	if (current->parent == NULL) {
-		if (join_namespaces()) {
-			pr_perror("Join namespaces failed");
-			goto err;
-		}
+		// if (join_namespaces()) {
+		// 	pr_perror("Join namespaces failed");
+		// 	goto err;
+		// }
 
 		pr_info("Calling restore_sid() for init\n");
 		restore_sid();
@@ -1623,8 +1622,8 @@ static int __restore_task_with_children(void *_arg)
 		if (collect_images(before_ns_cinfos, ARRAY_SIZE(before_ns_cinfos)))
 			goto err;
 
-		if (prepare_namespace(current, ca->clone_flags))
-			goto err;
+		// if (prepare_namespace(current, ca->clone_flags))
+		// 	goto err;
 
 		if (restore_finish_ns_stage(CR_STATE_PREPARE_NAMESPACES, CR_STATE_FORKING) < 0)
 			goto err;
@@ -1635,12 +1634,13 @@ static int __restore_task_with_children(void *_arg)
 		if (populate_root_fd_off())
 			goto err;
 	}
-
+	pr_info("start\n");
 	if (setup_newborn_fds(current))
 		goto err;
+	pr_info("end\n");
 
-	if (restore_task_mnt_ns(current))
-		goto err;
+	// if (restore_task_mnt_ns(current))
+	// 	goto err;
 
 	if (prepare_mappings(current))
 		goto err;
@@ -1783,7 +1783,7 @@ static int attach_to_tasks(bool root_seized)
 static int restore_rseq_cs(void)
 {
 	struct pstree_item *item;
-
+	return 0;
 	for_each_pstree_item(item) {
 		int i;
 
@@ -1942,6 +1942,7 @@ static unsigned int saved_loginuid;
 static int prepare_userns_hook(void)
 {
 	int ret;
+	return 0;
 
 	if (kdat.luid != LUID_FULL)
 		return 0;
@@ -2034,8 +2035,8 @@ static int restore_root_task(struct pstree_item *init)
 	if (prepare_userns_hook())
 		return -1;
 
-	if (prepare_namespace_before_tasks())
-		return -1;
+	// if (prepare_namespace_before_tasks())
+	// 	return -1;
 
 	if (vpid(init) == INIT_PID) {
 		if (!(root_ns_mask & CLONE_NEWPID)) {
@@ -2090,6 +2091,8 @@ static int restore_root_task(struct pstree_item *init)
 		}
 	}
 
+	goto skip_ns_bouncing;
+
 	if (!root_ns_mask)
 		goto skip_ns_bouncing;
 
@@ -2097,17 +2100,17 @@ static int restore_root_task(struct pstree_item *init)
 	 * uid_map and gid_map must be filled from a parent user namespace.
 	 * prepare_userns_creds() must be called after filling mappings.
 	 */
-	if ((root_ns_mask & CLONE_NEWUSER) && prepare_userns(init))
-		goto out_kill;
+	// if ((root_ns_mask & CLONE_NEWUSER) && prepare_userns(init))
+	// 	goto out_kill;
 
-	pr_info("Wait until namespaces are created\n");
-	ret = restore_wait_inprogress_tasks();
-	if (ret)
-		goto out_kill;
+	// pr_info("Wait until namespaces are created\n");
+	// ret = restore_wait_inprogress_tasks();
+	// if (ret)
+	// 	goto out_kill;
 
-	ret = run_scripts(ACT_SETUP_NS);
-	if (ret)
-		goto out_kill;
+	// ret = run_scripts(ACT_SETUP_NS);
+	// if (ret)
+	// 	goto out_kill;
 
 	ret = restore_switch_stage(CR_STATE_PREPARE_NAMESPACES);
 	if (ret)
@@ -2147,9 +2150,9 @@ skip_ns_bouncing:
 	if (ret < 0)
 		goto out_kill;
 
-	ret = apply_memfd_seals();
-	if (ret < 0)
-		goto out_kill;
+	// ret = apply_memfd_seals();
+	// if (ret < 0)
+	// 	goto out_kill;
 
 	/*
 	 * Zombies die after CR_STATE_RESTORE which is switched
@@ -2165,25 +2168,24 @@ skip_ns_bouncing:
 	if (ret < 0)
 		goto out_kill;
 
-	ret = stop_usernsd();
-	if (ret < 0)
-		goto out_kill;
+	// ret = stop_usernsd();
+	// if (ret < 0)
+	// 	goto out_kill;
 
-	ret = stop_cgroupd();
-	if (ret < 0)
-		goto out_kill;
+	// ret = stop_cgroupd();
+	// if (ret < 0)
+	// 	goto out_kill;
 
-	ret = move_veth_to_bridge();
-	if (ret < 0)
-		goto out_kill;
+	// ret = move_veth_to_bridge();
+	// if (ret < 0)
+	// 	goto out_kill;
 
-	ret = prepare_cgroup_properties();
-	if (ret < 0)
-		goto out_kill;
+	// ret = prepare_cgroup_properties();
+	// if (ret < 0)
+	// 	goto out_kill;
 
-	if (fault_injected(FI_POST_RESTORE))
-		goto out_kill;
-
+	// if (fault_injected(FI_POST_RESTORE))
+	// 	goto out_kill;
 	ret = run_scripts(ACT_POST_RESTORE);
 	if (ret != 0) {
 		pr_err("Aborting restore due to post-restore script ret code %d\n", ret);
@@ -2196,6 +2198,7 @@ skip_ns_bouncing:
 	 * There is no need to call try_clean_remaps() after this point,
 	 * as restore went OK and all ghosts were removed by the openers.
 	 */
+
 	if (depopulate_roots_yard(mnt_ns_fd, false))
 		goto out_kill;
 
@@ -2205,7 +2208,7 @@ skip_ns_bouncing:
 		goto out_kill;
 
 	/* Unlock network before disabling repair mode on sockets */
-	network_unlock();
+	//network_unlock();
 
 	/*
 	 * Stop getting sigchld, after we resume the tasks they
@@ -2257,28 +2260,28 @@ skip_ns_bouncing:
 	 * over the control to master process.
 	 */
 	pr_info("Run late stage hook from criu master for external devices\n");
-	for_each_pstree_item(item) {
-		if (!task_alive(item))
-			continue;
-		ret = run_plugins(RESUME_DEVICES_LATE, item->pid->real);
-		/*
-		 * This may not really be an error. Only certain plugin hooks
-		 * (if available) will return success such as amdgpu_plugin that
-		 * validates the pid of the resuming tasks in the kernel mode.
-		 * Most of the times, it'll be -ENOTSUP and in few cases, it
-		 * might actually be a true error code but that would be also
-		 * captured in the plugin so no need to print the error here.
-		 */
-		if (ret < 0 && ret != -ENOTSUP)
-			pr_debug("restore late stage hook for external plugin failed\n");
-	}
+	// for_each_pstree_item(item) {
+	// 	if (!task_alive(item))
+	// 		continue;
+	// 	ret = run_plugins(RESUME_DEVICES_LATE, item->pid->real);
+	// 	/*
+	// 	 * This may not really be an error. Only certain plugin hooks
+	// 	 * (if available) will return success such as amdgpu_plugin that
+	// 	 * validates the pid of the resuming tasks in the kernel mode.
+	// 	 * Most of the times, it'll be -ENOTSUP and in few cases, it
+	// 	 * might actually be a true error code but that would be also
+	// 	 * captured in the plugin so no need to print the error here.
+	// 	 */
+	// 	if (ret < 0 && ret != -ENOTSUP)
+	// 		pr_debug("restore late stage hook for external plugin failed\n");
+	// }
 
 	ret = run_scripts(ACT_PRE_RESUME);
 	if (ret)
 		pr_err("Pre-resume script ret code %d\n", ret);
 
-	if (restore_freezer_state())
-		pr_err("Unable to restore freezer state\n");
+	// if (restore_freezer_state())
+	// 	pr_err("Unable to restore freezer state\n");
 
 	/* Detaches from processes and they continue run through sigreturn. */
 	if (finalize_restore_detach())
@@ -2382,24 +2385,24 @@ int cr_restore_tasks(void)
 	if (init_stats(RESTORE_STATS))
 		return -1;
 
-	if (lsm_check_opts())
-		return -1;
+	// if (lsm_check_opts())
+	// 	return -1;
 
 	timing_start(TIME_RESTORE);
 
 	if (cpu_init() < 0)
 		return -1;
-
+	pr_info("start\n");
 	if (vdso_init_restore())
 		return -1;
+	pr_info("end\n");
+	// if (tty_init_restore())
+	// 	return -1;
 
-	if (tty_init_restore())
-		return -1;
-
-	if (opts.cpu_cap & CPU_CAP_IMAGE) {
-		if (cpu_validate_cpuinfo())
-			return -1;
-	}
+	// if (opts.cpu_cap & CPU_CAP_IMAGE) {
+	// 	if (cpu_validate_cpuinfo())
+	// 		return -1;
+	// }
 
 	if (prepare_task_entries() < 0)
 		return -1;
@@ -2431,8 +2434,8 @@ int cr_restore_tasks(void)
 	if (criu_signals_setup() < 0)
 		goto clean_cgroup;
 
-	if (prepare_lazy_pages_socket() < 0)
-		goto clean_cgroup;
+	// if (prepare_lazy_pages_socket() < 0)
+	// 	goto clean_cgroup;
 
 	ret = restore_root_task(root_item);
 clean_cgroup:
