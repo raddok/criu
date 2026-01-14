@@ -337,13 +337,21 @@ static int root_prepare_shared(void)
 		if (pi->pid->state == TASK_HELPER)
 			continue;
 
+		timing_start(TIME_VMA_READ);
+
 		ret = prepare_mm_pid(pi);
 		if (ret < 0)
 			break;
 
+		timing_stop(TIME_VMA_READ);
+
+		timing_start(TIME_FD_READ);
+
 		ret = prepare_fd_pid(pi);
 		if (ret < 0)
 			break;
+
+		timing_stop(TIME_FD_READ);
 
 		ret = prepare_fs_pid(pi);
 		if (ret < 0)
@@ -355,9 +363,13 @@ static int root_prepare_shared(void)
 
 	prepare_cow_vmas();
 
+	timing_start(TIME_RESTORER_INIT);
+
 	ret = prepare_restorer_blob();
 	if (ret)
 		goto err;
+
+	timing_stop(TIME_RESTORER_INIT);
 
 	ret = add_fake_unix_queuers();
 	if (ret)
@@ -643,6 +655,8 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 
 	memzero(ta, args_len);
 
+	timing_start(TIME_RESTORE_VMAFD);
+
 	if (prepare_fds(current))
 		return -1;
 
@@ -652,14 +666,22 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 	if (open_vmas(current))
 		return -1;
 
+	timing_stop(TIME_RESTORE_VMAFD);
+
 	// if (prepare_aios(current, ta))
 	// 	return -1;
 
 	// if (fixup_sysv_shmems())
 	// 	return -1;
 
+	timing_start(TIME_CORE_READ);
+
 	if (open_cores(pid, core))
 		return -1;
+
+	timing_stop(TIME_CORE_READ);
+
+	timing_start(TIME_FILL_RESTORER);
 
 	if (prepare_signals(pid, ta, core))
 		return -1;
@@ -720,6 +742,8 @@ static int restore_one_alive_task(int pid, CoreEntry *core)
 
 	if (arch_shstk_prepare(current, core, ta))
 		return -1;
+
+	timing_stop(TIME_FILL_RESTORER);
 
 	return sigreturn_restore(pid, ta, args_len, core);
 }
@@ -1642,8 +1666,12 @@ static int __restore_task_with_children(void *_arg)
 	// if (restore_task_mnt_ns(current))
 	// 	goto err;
 
+	timing_start(TIME_VMA_LOAD);
+
 	if (prepare_mappings(current))
 		goto err;
+
+	timing_stop(TIME_VMA_LOAD);
 
 	if (prepare_sigactions(ca->core) < 0)
 		goto err;
@@ -2060,7 +2088,11 @@ static int restore_root_task(struct pstree_item *init)
 		}
 	}
 
+	timing_stop(TIME_INIT);
+
 	__restore_switch_stage_nw(CR_STATE_ROOT_TASK);
+
+	timing_start(TIME_CREATE_MAIN);
 
 	ret = fork_with_pid(init);
 	if (ret < 0)
@@ -2090,6 +2122,8 @@ static int restore_root_task(struct pstree_item *init)
 			goto out_kill;
 		}
 	}
+
+	timing_stop(TIME_CREATE_MAIN);
 
 	goto skip_ns_bouncing;
 
@@ -2146,9 +2180,13 @@ skip_ns_bouncing:
 	if (ret < 0 && ret != -ENOTSUP)
 		goto out_kill;
 
+	
+
 	ret = restore_wait_inprogress_tasks();
 	if (ret < 0)
 		goto out_kill;
+
+	timing_stop(TIME_MM_RESTORE);
 
 	// ret = apply_memfd_seals();
 	// if (ret < 0)
@@ -2163,6 +2201,8 @@ skip_ns_bouncing:
 		if (item->pid->state == TASK_DEAD)
 			task_entries->nr_threads--;
 	}
+
+	timing_start(TIME_SYNC_PROCS);
 
 	ret = restore_switch_stage(CR_STATE_RESTORE_SIGCHLD);
 	if (ret < 0)
@@ -2228,6 +2268,7 @@ skip_ns_bouncing:
 
 	timing_stop(TIME_RESTORE);
 
+	timing_stop(TIME_SYNC_PROCS);
 	if (catch_tasks(root_seized)) {
 		pr_err("Can't catch all tasks\n");
 		goto out_kill_network_unlocked;
@@ -2260,21 +2301,21 @@ skip_ns_bouncing:
 	 * over the control to master process.
 	 */
 	pr_info("Run late stage hook from criu master for external devices\n");
-	// for_each_pstree_item(item) {
-	// 	if (!task_alive(item))
-	// 		continue;
-	// 	ret = run_plugins(RESUME_DEVICES_LATE, item->pid->real);
-	// 	/*
-	// 	 * This may not really be an error. Only certain plugin hooks
-	// 	 * (if available) will return success such as amdgpu_plugin that
-	// 	 * validates the pid of the resuming tasks in the kernel mode.
-	// 	 * Most of the times, it'll be -ENOTSUP and in few cases, it
-	// 	 * might actually be a true error code but that would be also
-	// 	 * captured in the plugin so no need to print the error here.
-	// 	 */
-	// 	if (ret < 0 && ret != -ENOTSUP)
-	// 		pr_debug("restore late stage hook for external plugin failed\n");
-	// }
+	for_each_pstree_item(item) {
+		if (!task_alive(item))
+			continue;
+		ret = run_plugins(RESUME_DEVICES_LATE, item->pid->real);
+		/*
+		 * This may not really be an error. Only certain plugin hooks
+		 * (if available) will return success such as amdgpu_plugin that
+		 * validates the pid of the resuming tasks in the kernel mode.
+		 * Most of the times, it'll be -ENOTSUP and in few cases, it
+		 * might actually be a true error code but that would be also
+		 * captured in the plugin so no need to print the error here.
+		 */
+		if (ret < 0 && ret != -ENOTSUP)
+			pr_debug("restore late stage hook for external plugin failed\n");
+	}
 
 	ret = run_scripts(ACT_PRE_RESUME);
 	if (ret)
@@ -2389,6 +2430,8 @@ int cr_restore_tasks(void)
 	// 	return -1;
 
 	timing_start(TIME_RESTORE);
+
+	timing_start(TIME_INIT);
 
 	if (cpu_init() < 0)
 		return -1;
@@ -3241,6 +3284,8 @@ static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, uns
 	 * or inited from scratch).
 	 */
 
+	timing_start(TIME_REMAP_RESTORER);
+
 	mem = (void *)restorer_get_vma_hint(&vmas->h, &self_vmas.h,
 					    shstk_min_mmap_addr(&task_args->shstk, kdat.mmap_min_addr),
 					    task_args->bootstrap_len);
@@ -3294,6 +3339,8 @@ static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, uns
 	mem += alen;
 	if (rst_mem_remap(mem))
 		goto err;
+
+	timing_stop(TIME_REMAP_RESTORER);
 
 	/*
 	 * At this point we've found a gap in VM that fits in both -- current
@@ -3373,6 +3420,9 @@ static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, uns
 	creds_pos_next = creds_pos;
 	siginfo_n = task_args->siginfo_n;
 	arch_rsti_init(current);
+
+	timing_start(TIME_THREAD_SETUP);
+
 	for (i = 0; i < current->nr_threads; i++) {
 		CoreEntry *tcore;
 		struct rt_sigframe *sigframe;
@@ -3475,6 +3525,8 @@ static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, uns
 		pr_info("Thread %4d stack %8p rt_sigframe %8p\n", i, mz[i].stack, mz[i].rt_sigframe);
 	}
 
+	timing_stop(TIME_THREAD_SETUP);
+
 	/*
 	 * Restorer needs own copy of vdso parameters. Runtime
 	 * vdso must be kept non intersecting with anything else,
@@ -3546,6 +3598,7 @@ static int sigreturn_restore(pid_t pid, struct task_restore_args *task_args, uns
 	 * An indirect call to task_restore, note it never returns
 	 * and restoring core is extremely destructive.
 	 */
+	timing_start(TIME_MM_RESTORE);
 
 	JUMP_TO_RESTORER_BLOB(new_sp, restore_task_exec_start, task_args);
 

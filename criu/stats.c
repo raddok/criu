@@ -1,3 +1,4 @@
+#include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/time.h>
@@ -120,6 +121,7 @@ static void encode_time(int t, u_int32_t *to)
 
 static void display_stats(int what, StatsEntry *stats)
 {
+	u_int32_t time_us;
 	if (what == DUMP_STATS) {
 		pr_msg("Displaying dump stats:\n");
 		pr_msg("Freezing time: %d us\n", stats->dump->freezing_time);
@@ -147,6 +149,32 @@ static void display_stats(int what, StatsEntry *stats)
 			       stats->restore->pages_restored);
 		pr_msg("Restore time: %d us\n", stats->restore->restore_time);
 		pr_msg("Forking time: %d us\n", stats->restore->forking_time);
+		encode_time(TIME_INIT, &time_us);
+		pr_msg("Init time: %d us\n", time_us);
+		encode_time(TIME_CREATE_MAIN, &time_us);
+		pr_msg("Create main task time: %d us\n", time_us);
+		encode_time(TIME_VMA_READ, &time_us);
+		pr_msg("VMA read time: %d us\n", time_us);
+		encode_time(TIME_FD_READ, &time_us);
+		pr_msg("FD read time: %d us\n", time_us);
+		encode_time(TIME_RESTORER_INIT, &time_us);
+		pr_msg("Restorer init time: %d us\n", time_us);
+		encode_time(TIME_VMA_LOAD, &time_us);
+		pr_msg("VMA load time: %d us\n", time_us);
+		encode_time(TIME_RESTORE_VMAFD, &time_us);
+		pr_msg("VMA FD restore time: %d us\n", time_us);
+		encode_time(TIME_CORE_READ, &time_us);
+		pr_msg("Core read time: %d us\n", time_us);
+		encode_time(TIME_FILL_RESTORER, &time_us);
+		pr_msg("Fill restorer time: %d us\n", time_us);
+		encode_time(TIME_REMAP_RESTORER, &time_us);
+		pr_msg("Remap restorer time: %d us\n", time_us);
+		encode_time(TIME_THREAD_SETUP, &time_us);
+		pr_msg("Thread setup time: %d us\n", time_us);
+		encode_time(TIME_MM_RESTORE, &time_us);
+		pr_msg("MM restore time: %d us\n", time_us);
+		encode_time(TIME_SYNC_PROCS, &time_us);
+		pr_msg("Sync processes time: %d us\n", time_us);
 	} else
 		return;
 }
