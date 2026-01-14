@@ -263,7 +263,6 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 		madvise(data_head, len, MADV_POPULATE_WRITE);
 		
 		timing_start(TIME_CXLWRITE);
-		gettimeofday(&t1, NULL);
 		img = (struct im_img *)(xfer->pi);
 		im_write_header(img);
 		pr_info("page length is %lu, write at offset %lu\n", len, data_head - base_ptr);
@@ -287,14 +286,11 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 			current_im_desc->size += padding;
 			im_img_checkpoint->total_size += padding;
 		}
-		gettimeofday(&t2, NULL);
 		timing_stop(TIME_CXLWRITE);
-		pr_info("page copy time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 		//pr_info("Total_size now is %ld\n", im_img_checkpoint->total_size);
 		return 0;
 	}
 	timing_start(TIME_DISKWRITE);
-	gettimeofday(&t1, NULL);
 	while (1) {
 		ret = splice(p, NULL, img_raw_fd(xfer->pi), NULL, len - curr, SPLICE_F_MOVE);
 		if (ret == -1) {
@@ -309,9 +305,7 @@ static int write_pages_loc(struct page_xfer *xfer, int p, unsigned long len)
 		if (curr == len)
 			break;
 	}
-	gettimeofday(&t2, NULL);
 	timing_stop(TIME_DISKWRITE);
-	pr_info("page copy time is %ld\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
 	return 0;
 }
 

@@ -1736,7 +1736,6 @@ static int dump_one_task(struct pstree_item *item, InventoryEntry *parent_ie)
 	ret = dump_task_core_all(parasite_ctl, item, &pps_buf, imgset, &misc);
 	if (ret) {
 		pr_err("Dump core (pid: %d) failed with %d\n", pid, ret);
-		timing_stop(TIME_CPUDUMP);
 		goto err_cure;
 	}
 	timing_stop(TIME_CPUDUMP);
@@ -1776,7 +1775,6 @@ static int dump_one_task(struct pstree_item *item, InventoryEntry *parent_ie)
 	ret = dump_task_mm(pid, &pps_buf, &misc, &vmas, imgset);
 	if (ret) {
 		pr_err("Dump mappings (pid: %d) failed with %d\n", pid, ret);
-		timing_stop(TIME_VMADUMP);
 		goto err;
 	}
 	timing_stop(TIME_VMADUMP);
