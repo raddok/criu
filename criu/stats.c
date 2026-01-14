@@ -128,6 +128,16 @@ static void display_stats(int what, StatsEntry *stats)
 		pr_msg("Frozen time: %d us\n", stats->dump->frozen_time);
 		pr_msg("Memory dump time: %d us\n", stats->dump->memdump_time);
 		pr_msg("Memory write time: %d us\n", stats->dump->memwrite_time);
+		encode_time(TIME_CXLWRITE, &time_us);
+		pr_msg("CXL write time: %d us\n", time_us);
+		encode_time(TIME_DISKWRITE, &time_us);
+		pr_msg("Disk write time: %d us\n", time_us);
+		encode_time(TIME_CPUDUMP, &time_us);
+		pr_msg("CPU dump time: %d us\n", time_us);
+		encode_time(TIME_VMADUMP, &time_us);
+		pr_msg("VMA dump time: %d us\n", time_us);
+		encode_time(TIME_PMDUMP, &time_us);
+		pr_msg("Pagemap dump time: %d us\n", time_us);
 		if (stats->dump->has_irmap_resolve)
 			pr_msg("IRMAP resolve time: %d us\n", stats->dump->irmap_resolve);
 		pr_msg("Memory pages scanned: %" PRIu64 " (0x%" PRIx64 ")\n", stats->dump->pages_scanned,
